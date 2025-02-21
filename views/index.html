@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset='utf-8'>
+    <meta http-equiv='X-UA-Compatible' content='IE=edge'>
+    <title>Sparks fly | Gerência de usuários</title>
+    <meta name='viewport' content='width=device-width, initial-scale=1'>
+    <link rel='stylesheet' type='text/css' media='screen' href='main.css'>
+</head>
+
+<style>
+    *{
+    margin: 0;
+    padding: 0;
+}
+
+body {
+	background-color: #E9D8F2;
+}
+
+nav{
+    background-image: url('https://i.pinimg.com/750x/f2/92/2f/f2922f8bdfacb41a2a6b6234fc32e423.jpg');
+    background-repeat: no-repeat;
+    background-size: 9%;
+    margin-top: 0px;
+    background-color: #8858C7;
+    height: 150px;
+    background-position: 3% 35%;
+    /*margin-bottom: 10px;
+    box-shadow: 10px 5px 5px pink;*/
+  }
+  
+  
+  nav ul{
+   display: flex;
+   padding-left: 250px;
+   padding-top: 50px;
+  
+  }
+  
+  nav ul li{
+    display: flex;
+    flex-wrap: wrap;
+    margin:5px 55px 15px 0px;
+  }
+  
+  nav ul li a{
+  color: black;
+  font-weight: bold;
+  text-decoration: none;
+  font-family: Georgia, serif;
+  font-size: 18px;
+  }
+  
+  nav ul li a:hover{
+    background-image: linear-gradient(to bottom, #9C90DC, #DCD2F0, #9AACDD);
+  
+  
+  background-clip: text;
+  -webkit-background-clip: text; 
+  
+  
+  -webkit-text-fill-color: transparent;
+  
+  
+  color: black;
+  }
+
+  .card{
+    margin-top: 50px;
+    background-color: white;
+    margin-left: auto;
+    padding-bottom: 30px;
+    margin-right: auto;
+    text-align: center;
+    width: 70%;
+    border-radius: 5px;
+    box-shadow: 0px 5px 70px -12px #9C90DC;
+}
+
+.card h1{
+    color: #8858C7;
+    padding-top: 30px;
+    margin-bottom: 15px;
+    font-size: 32px;
+}
+
+.card h2{
+    margin-bottom: 20px;
+}
+
+.card h3{
+    color: #9C90DC;
+    font-size: 25px;
+    margin-top: 10px;
+    margin-bottom: 10px;
+    text-transform:capitalize;
+}
+
+.card ul{
+     display: flex;
+     justify-content: center;
+}
+
+.card ul li {
+    padding-left: 0%;
+    text-align: left;
+    font-weight: bold;
+    color: #9C90DC;
+    margin-left: 20px;
+}
+
+.card img{
+    border-radius: 10px;
+    margin: 50px 0px 0px 0px;
+}
+
+.card p{
+    text-align: justify;
+    font-size: 18px;
+    margin: 0px 50px 0px 50px;
+}
+
+footer{
+    background-image: url('https://i.pinimg.com/750x/f2/92/2f/f2922f8bdfacb41a2a6b6234fc32e423.jpg');
+    background-repeat: no-repeat;
+    background-size: 9%;
+    margin-top: 50px;
+    background-color: #8858C7;
+    background-position: 3% 35%;
+    height: 200px;
+    position: relative;
+    bottom: 0;
+    padding-left: 250px;
+ }
+
+ footer h3{
+    text-align: right;
+    position: absolute;
+    top: 50%;
+    transform: translate(50%, -50%);
+    color: white;
+ }
+
+</style>
+
+<body>
+
+   <nav>
+    <ul>
+        <li><a href="#cadastrar">Cadastrar</a></li>
+        <li><a href="#consultar">Consultar</a></li>
+        <li><a href="#alterar">Alterar</a></li>
+        <li><a href="#deletar">Deletar</a></li>
+        <li><a href="#autenticar">Autenticar</a></li>
+    </ul>
+   </nav>
+
+    <div class="card">
+
+    <div>
+
+        <h1>Sparks Fly - Gerência de Usuários</h1>
+    
+        <h2>Usamos nessa API as seguintes tecnologias:</h2>
+    <ul>
+        <li>Sequelize</li>
+        <li>Sequelize cli</li>
+        <li>Express JS</li>
+        <li>Postgres SQL</li>
+        <li>Thunder Client</li>
+        <li>Nodemon</li>
+    </ul></div>
+
+    <img src="https://i.pinimg.com/564x/41/c6/70/41c6703226cbdbcb50a38d96273e690c.jpg"/>
+
+
+    <h1>Funcionalidades:</h1>
+    
+
+    <div id="cadastrar"><h3>Cadastrar usuários</h3> 
+        <p>O cadastro de novos usuários no banco de dados através do verbo "create" vindo do sequelize que foi instalado
+            e usado ao longo do desenvolvimento. Isso ocorre de modo que ao acessar uma rota "post", informando os dados do usuário é feito seu cadastro no banco, 
+            como informado no arquivo "routes", com isso, a função "create users" é executada, e os dados serão salvos no banco de dados com um id identificador.
+        </p>
+    </div>
+    <div id="consultar"><h3>Consultar usuários</h3>
+    <p>A consulta dos usuários é efetuada após a requisição através do método get, como escrito no arquivo routes. Ao acessar essa rota, a partir do sequelize é possível fazer a consulta usando
+    o verbo "findAll" para a listagem de todos os usuários cadastrados, executada na função "searchUsers".     
+    </p>
+    </div>
+    <div id="alterar"><h3>Alterar usuários</h3>
+       <p>A função de alterar usuários, também é feita através de uma requisição, porém, na rota "put" datada no arquivo routes, utilizando o verbo "Update" do sequelize.
+         Deve-se portanto informar o id do usuário à ser alterado na url da api, após, informa-se os dados alterados que serão atualizados no banco de dados, através da função "updateUser".</p> 
+    </div>
+    <div id="deletar"><h3>Deletar usuários</h3>
+   <p>Para deletar um usuário, a requisição é feita pela rota "delete", que é executada no verbo "destroy" do sequelize na função "deleteUser", usando como parâmetro o id do usuário
+    cadastrado.</p> 
+    </div>
+
+    <div id="autenticar"><h3>Autenticar usuários</h3>
+    <p>Por fim, estabelecemos também a funcionalidade de autenticação de usuários, que é feita com os dados de email e senha, utilizando o verbo "findOne" do sequelize na função "authenticatedUser", que verifica
+        a partir do parâmetro "user", se o email e password fornecidos pelo formulário batem com os cadastrados no bando de dados, se sim, o usuário
+        ganhará um token e será autenticado. Essa função é executada em uma rota "post". </p>
+    </div>
+
+    </div>
+
+    <footer>
+        <div>
+            <h3>Flavia Nunes Barboza de Morais & Maria Fernanda de Souza</h3>
+        </div>       
+    </footer>
+
+</body>
+
+</html>
