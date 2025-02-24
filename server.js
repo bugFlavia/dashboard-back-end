@@ -37,6 +37,7 @@ app.use((err, req, res, next) => {
 app.listen(port, () => { console.log(`Servidor rodando na porta ${port}`); });
 
 app.get('/', (req, res) => {
-    const filePath = path.join(__dirname, 'views', 'index.html');
-    res.sendFile(filePath);
+  const filePath = path.join(__dirname, 'views', 'index.html');
+  res.sendFile(filePath);
 });
+
