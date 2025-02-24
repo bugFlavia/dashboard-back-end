@@ -1,11 +1,11 @@
-require('./config/connection');
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-require('dotenv').config();
-
-const { expressjwt: expressJWT } = require("express-jwt");
 const cookieParser = require('cookie-parser');
+const { expressjwt: expressJWT } = require("express-jwt");
+const routes = require('./routers/routes');
+require('./config/connection');
 
 const app = express();
 const port = process.env.PORT || 3003;
@@ -15,8 +15,6 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
 app.use(cookieParser());
-
-const routes = require('./routers/routes');
 
 app.use(
     expressJWT({
@@ -30,7 +28,13 @@ app.use(
 
 app.use('/', routes);
 
-app.listen(port, () => { console.log(`Run server...${port}`); });
+// Middleware para tratar erros de servidor e retornar JSON
+app.use((err, req, res, next) => {
+    console.error(err.stack);
+    res.status(500).json({ error: 'Algo deu errado!' });
+});
+
+app.listen(port, () => { console.log(`Servidor rodando na porta ${port}`); });
 
 app.get('/', (req, res) => {
     const filePath = path.join(__dirname, 'views', 'index.html');

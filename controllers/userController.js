@@ -19,17 +19,17 @@ const createUser = async (req, res) => {
         res.json("Usuário cadastrado com sucesso!");
         console.log('Cadastro de usuário realizado com sucesso!');
     }).catch((erro) => {
-        res.json("Deu erro!");
+        res.status(500).json({ error: "Deu erro ao cadastrar usuário" });
         console.log(`Ops, deu erro: ${erro}`);
     });
 };
 
 const searchUsers = async (req, res) => {
-    const users = await User.findAll();
     try {
+        const users = await User.findAll();
         res.json(users);
     } catch (error) {
-        res.status(404).json("Deu erro");
+        res.status(500).json({ error: "Erro ao buscar usuários" });
     }
 };
 
@@ -44,7 +44,7 @@ const deleteUser = async (req, res) => {
             res.json("Usuário deletado");
         });
     } catch (error) {
-        res.status(404).json("Deu erro!");
+        res.status(500).json({ error: "Erro ao deletar usuário" });
     }
 };
 
@@ -70,7 +70,7 @@ const updateUser = async (req, res) => {
             res.json("Usuário alterado!");
         });
     } catch (error) {
-        res.status(404).json("Deu erro!");
+        res.status(500).json({ error: "Erro ao alterar usuário" });
     }
 };
 
@@ -93,10 +93,10 @@ const authenticatedUser = async (req, res) => {
                 token: token
             });
         } else {
-            return res.status(401).json('Senha incorreta.');
+            return res.status(401).json({ error: 'Senha incorreta.' });
         }
     } catch (error) {
-        return res.status(404).json('Usuário não encontrado');
+        return res.status(500).json({ error: 'Erro ao autenticar usuário' });
     }
 };
 
