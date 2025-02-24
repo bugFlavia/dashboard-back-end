@@ -4,20 +4,19 @@ const cors = require('cors');
 const path = require('path');
 require('dotenv').config();
 
-const { expressjwt: expressJWT} = require("express-jwt");
-const cookieParser = require('cookie-parser')
-
+const { expressjwt: expressJWT } = require("express-jwt");
+const cookieParser = require('cookie-parser');
 
 const app = express();
 const port = process.env.PORT || 3003;
 
+app.use(cors());
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.urlencoded({ extended: false }));
-
+app.use(express.json());
+app.use(cookieParser());
 
 const routes = require('./routers/routes');
-
-app.use(cookieParser())
 
 app.use(
     expressJWT({
@@ -27,13 +26,11 @@ app.use(
     }).unless({
         path: ["/user/authenticated", "/user"]
     })
-)
+);
 
+app.use('/', routes);
 
-app.use(express.json(), routes, cors());
-app.listen(port, () => { console.log(`Run server...${port}`) });
-
-
+app.listen(port, () => { console.log(`Run server...${port}`); });
 
 app.get('/', (req, res) => {
     const filePath = path.join(__dirname, 'views', 'index.html');
