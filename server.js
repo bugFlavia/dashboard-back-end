@@ -10,7 +10,10 @@ require('./config/connection');
 const app = express();
 const port = process.env.PORT || 3003;
 
-app.use(cors());
+app.use(cors({
+    origin: "*", // Ajuste para o domínio correto na Vercel se necessário
+    credentials: true
+}));
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
@@ -28,7 +31,7 @@ app.use(
 
 app.use('/', routes);
 
-// Middleware para tratar erros de servidor e retornar JSON
+// Middleware para tratar erros
 app.use((err, req, res, next) => {
     console.error(err.stack);
     res.status(500).json({ error: 'Algo deu errado!' });
@@ -37,6 +40,6 @@ app.use((err, req, res, next) => {
 app.listen(port, () => { console.log(`Servidor rodando na porta ${port}`); });
 
 app.get('/', (req, res) => {
-    const filePath = path.join(__dirname, 'views', 'index.html');
-    res.sendFile(filePath);
+  const filePath = path.join(__dirname, 'views', 'index.html');
+  res.sendFile(filePath);
 });

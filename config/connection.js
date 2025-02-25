@@ -1,18 +1,16 @@
 const { Sequelize } = require('sequelize');
-const config = require('../config/config.json')[process.env.NODE_ENV || 'development'];
+const config = require('./config')[process.env.NODE_ENV || 'development'];
 require('dotenv').config();
 
 const sequelize = new Sequelize(config.database, config.username, config.password, {
   host: config.host,
-  dialect: 'mysql',
+  dialect: config.dialect,
   port: config.port,
+  logging: false
 });
 
-try {
-  sequelize.authenticate();
-  console.log('Usuário autenticado com sucesso');
-} catch (error) {
-  console.error('Erro de autenticação', error);
-}
+sequelize.authenticate()
+  .then(() => console.log('Conectado ao banco de dados!'))
+  .catch(err => console.error('Erro ao conectar ao banco:', err));
 
 module.exports = { Sequelize, sequelize };
