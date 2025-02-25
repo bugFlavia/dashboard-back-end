@@ -40,4 +40,3 @@ app.get('/', (req, res) => {
   const filePath = path.join(__dirname, 'views', 'index.html');
   res.sendFile(filePath);
 });
-
