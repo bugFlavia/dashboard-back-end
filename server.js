@@ -16,16 +16,6 @@ app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
 app.use(cookieParser());
 
-app.use(
-    expressJWT({
-        secret: process.env.SECRET,
-        algorithms: ["HS256"],
-        getToken: req => req.cookies.token
-    }).unless({
-        path: ["/user/authenticated", "/user", "/users"]
-    })
-);
-
 app.use('/', routes);
 
 // Middleware para tratar erros de servidor e retornar JSON
@@ -37,7 +27,6 @@ app.use((err, req, res, next) => {
 app.listen(port, () => { console.log(`Servidor rodando na porta ${port}`); });
 
 app.get('/', (req, res) => {
-  const filePath = path.join(__dirname, 'views', 'index.html');
-  res.sendFile(filePath);
+    const filePath = path.join(__dirname, 'views', 'index.html');
+    res.sendFile(filePath);
 });
-
