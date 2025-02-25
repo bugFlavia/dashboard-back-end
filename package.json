@@ -3,14 +3,14 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "start": "node server.js", 
+    "start": "node server.js",
     "build": "echo \"No build necessary for this backend project\"",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
-  "author": "",
+  "author": "flavia",
   "license": "ISC",
-  "description": "",
+  "description": "dashboard-back-end",
   "dependencies": {
     "bcryptjs": "^3.0.2",
     "cookie-parser": "^1.4.7",
@@ -27,5 +27,13 @@
   },
   "devDependencies": {
     "sequelize-cli": "^6.6.2"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bugFlavia/dashboard-back-end.git"
+  },
+  "bugs": {
+    "url": "https://github.com/bugFlavia/dashboard-back-end/issues"
+  },
+  "homepage": "https://github.com/bugFlavia/dashboard-back-end#readme"
 }
