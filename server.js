@@ -46,12 +46,13 @@ app.delete('/items/:id', (req, res) => {
   res.json({ message: 'Item removido com sucesso' });
 });
 
-// Inicializando o servidor
+// Inicializando o servidor apenas se rodar localmente
 if (require.main === module) {
-  app.listen(port, () => {
-    console.log(`Servidor rodando em http://localhost:${port}`);
-  });
-}
-
-// Exportando para a Vercel
-module.exports = app;
+    app.listen(port, () => {
+      console.log(`Servidor rodando em http://localhost:${port}`);
+    });
+  }
+  
+  // Exportando o app para a Vercel
+  module.exports = app;
+  
