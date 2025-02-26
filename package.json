@@ -3,8 +3,8 @@
   "version": "1.0.0",
   "main": "src/server.js",
   "scripts": {
-    "start": "node server.js",
-    "build": "echo \"No build necessary for this backend project\"",
+    "start": "node src/server.js",
+    "build": "next build",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
