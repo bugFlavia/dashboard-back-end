@@ -1,4 +1,3 @@
-require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
@@ -10,19 +9,15 @@ const mysql = require('mysql2/promise');
 const app = express();
 const port = process.env.PORT || 3003;
 
-app.use(cors({
-    origin: "*", // Ajuste para o domínio correto na Vercel se necessário
-    credentials: true
-}));
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(cors({ origin: "*", credentials: true }));
+app.use(express.static(path.join(__dirname, '../public')));
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
 app.use(cookieParser());
 
-// Removendo a verificação de token
 app.use('/', routes);
 
-// Endpoint para testar a conexão com o banco
+// Teste de conexão com o banco
 app.get('/test-db', async (req, res) => {
     try {
         const connection = await mysql.createConnection({
@@ -33,22 +28,19 @@ app.get('/test-db', async (req, res) => {
             port: process.env.DB_PORT
         });
 
-        await connection.query("SELECT 1"); // Teste de conexão
+        await connection.query("SELECT 1");
         res.status(200).json({ message: "✅ Conexão bem-sucedida!" });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
 });
 
-// Middleware para tratar erros
+// Middleware de erro
 app.use((err, req, res, next) => {
     console.error(err.stack);
     res.status(500).json({ error: 'Algo deu errado!' });
 });
 
-app.listen(port, () => { console.log(`Servidor rodando na porta ${port}`); });
+// Exportar o app para a Vercel
+module.exports = app;
 
-app.get('/', (req, res) => {
-  const filePath = path.join(__dirname, 'views', 'index.html');
-  res.sendFile(filePath);
-});
