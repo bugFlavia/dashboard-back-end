@@ -1,13 +1,10 @@
-// Importando dependências
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
 
-// Inicializando o servidor
 const app = express();
-const port = process.env.PORT || 3003;
+const port = process.env.PORT || 3000;
 
-// Middleware
 app.use(cors());
 app.use(bodyParser.json());
 
@@ -48,11 +45,10 @@ app.delete('/items/:id', (req, res) => {
 
 // Inicializando o servidor apenas se rodar localmente
 if (require.main === module) {
-    app.listen(port, () => {
-      console.log(`Servidor rodando em http://localhost:${port}`);
-    });
-  }
-  
-  // Exportando o app para a Vercel
-  module.exports = app;
-  
+  app.listen(port, () => {
+    console.log(`Servidor rodando em http://localhost:${port}`);
+  });
+}
+
+// Exportando para a Vercel
+module.exports = app;
