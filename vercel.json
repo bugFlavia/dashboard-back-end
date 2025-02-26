@@ -8,8 +8,10 @@
     ],
     "routes": [
         {
-            "src": "/{.*}",
+            "src": "/(.*)",
             "dest": "src/server.js"
         }
-    ]
+    ],
+    "installCommand": "yarn install",
+    "buildCommand": "yarn build"
 }

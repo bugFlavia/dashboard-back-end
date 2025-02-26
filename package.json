@@ -4,13 +4,13 @@
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
-    "build": "next build",
+    "build": "echo 'No build step needed'",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": [],
-  "author": "flavia",
-  "license": "ISC",
-  "description": "dashboard-back-end",
+  "engines": {
+    "node": "18.x",
+    "yarn": "1.x"
+  },
   "dependencies": {
     "bcryptjs": "^3.0.2",
     "cookie-parser": "^1.4.7",
