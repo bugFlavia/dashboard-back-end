@@ -3,7 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
 const { Sequelize } = require('sequelize');
-const User = require('./models/User'); // Modelo do Usuário
+const User = require('./models/user'); // Modelo do Usuário
 
 // Inicializando o servidor
 const app = express();
