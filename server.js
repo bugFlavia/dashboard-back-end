@@ -58,7 +58,7 @@ app.post('/login', async (req, res) => {
 
     const odbcConnection = await connectToOdbc();
     const companyCode = user.codi_emp;
-    const query = `SELECT * FROM your_table WHERE company_code = ?`;
+    const query = `SELECT cgce_emp FROM bethadba.geempre WHERE codi_emp = ?`;
     const result = await odbcConnection.query(query, [companyCode]);
 
     res.json({ user, companyData: result });
