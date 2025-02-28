@@ -31,7 +31,8 @@ app.get('/users', async (req, res) => {
     const users = await User.findAll();
     res.json(users);
   } catch (error) {
-    res.status(500).json({ error: 'Erro ao listar usuários' });
+    console.error("Erro ao listar usuários:", error); // Exibe erro detalhado no console
+    res.status(500).json({ error: 'Erro ao listar usuários', details: error.message });
   }
 });
 
@@ -45,7 +46,6 @@ app.post('/user', async (req, res) => {
     res.status(500).json({ error: 'Erro ao criar usuário', details: error.message });
   }
 });
-
 
 // Inicializando o servidor
 if (require.main === module) {
