@@ -3,7 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
 const { Sequelize } = require('sequelize');
-const User = require('./models/user'); // Modelo do Usuário
+const User = require('./models/user'); // Corrigir para letras minúsculas
 
 // Inicializando o servidor
 const app = express();
@@ -24,6 +24,11 @@ sequelize.authenticate()
   .then(() => console.log('Conectado ao banco de dados!'))
   .catch(err => console.error('Erro ao conectar ao banco:', err));
 
+// Sincronizar os modelos com o banco de dados
+sequelize.sync()
+  .then(() => console.log('Modelos sincronizados com o banco de dados'))
+  .catch(err => console.error('Erro ao sincronizar modelos:', err));
+
 // Rotas CRUD
 // Listar todos os usuários
 app.get('/users', async (req, res) => {
@@ -31,7 +36,7 @@ app.get('/users', async (req, res) => {
     const users = await User.findAll();
     res.json(users);
   } catch (error) {
-    console.error("Erro ao listar usuários:", error); // Exibe erro detalhado no console
+    console.error("Erro ao listar usuários:", error); // Log detalhado
     res.status(500).json({ error: 'Erro ao listar usuários', details: error.message });
   }
 });
@@ -42,7 +47,7 @@ app.post('/user', async (req, res) => {
     const user = await User.create({ nome, nome_empresa, cpf, cnpj, codi_emp, celular, email, senha });
     res.status(201).json(user);
   } catch (error) {
-    console.error("Erro ao criar usuário:", error); // Exibe erro detalhado no console
+    console.error("Erro ao criar usuário:", error); // Log detalhado
     res.status(500).json({ error: 'Erro ao criar usuário', details: error.message });
   }
 });
