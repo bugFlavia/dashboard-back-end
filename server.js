@@ -58,13 +58,35 @@ app.post('/login', async (req, res) => {
 
     const odbcConnection = await connectToOdbc();
     const companyCode = user.codi_emp;
-    const query = `SELECT cgce_emp FROM bethadba.geempre WHERE codi_emp = ?`;
+    const query = `SELECT * FROM your_table WHERE company_code = ?`;
     const result = await odbcConnection.query(query, [companyCode]);
 
     res.json({ user, companyData: result });
   } catch (error) {
     console.error("Erro ao fazer login:", error); // Log detalhado
     res.status(500).json({ error: 'Erro ao fazer login', details: error.message });
+  }
+});
+
+// Rota para somar todos os valores da coluna `vlor_lan` para a empresa logada
+app.get('/sum', async (req, res) => {
+  try {
+    const { email, senha } = req.body;
+    const user = await User.findOne({ where: { email, senha } });
+
+    if (!user) {
+      return res.status(401).json({ error: 'Credenciais inválidas' });
+    }
+
+    const odbcConnection = await connectToOdbc();
+    const companyCode = user.codi_emp;
+    const query = `SELECT SUM(vlor_lan) AS total FROM bethadba.ctlancto WHERE codi_emp = ?`;
+    const result = await odbcConnection.query(query, [companyCode]);
+
+    res.json({ total: result[0].total });
+  } catch (error) {
+    console.error("Erro ao calcular a soma dos valores:", error); // Log detalhado
+    res.status(500).json({ error: 'Erro ao calcular a soma dos valores', details: error.message });
   }
 });
 
