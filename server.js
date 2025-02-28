@@ -2,8 +2,8 @@
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
-const { Sequelize } = require('sequelize');
-const User = require('./models/user'); // Corrigir para letras minúsculas
+const User = require('./models/user'); // Certifique-se de usar letras minúsculas
+const connectToOdbc = require('./config/odbcConnection'); // Conexão ODBC
 
 // Inicializando o servidor
 const app = express();
@@ -14,15 +14,7 @@ app.use(cors());
 app.use(bodyParser.json());
 
 // Conectando ao banco de dados
-const sequelize = new Sequelize(process.env.JAWSDB_URL, {
-  dialect: 'mysql',
-  logging: false
-});
-
-// Testar conexão com o banco
-sequelize.authenticate()
-  .then(() => console.log('Conectado ao banco de dados!'))
-  .catch(err => console.error('Erro ao conectar ao banco:', err));
+const sequelize = require('./config/database');
 
 // Sincronizar os modelos com o banco de dados
 sequelize.sync()
@@ -30,7 +22,20 @@ sequelize.sync()
   .catch(err => console.error('Erro ao sincronizar modelos:', err));
 
 // Rotas CRUD
-// Listar todos os usuários
+
+// Rota para cadastrar um novo usuário
+app.post('/user', async (req, res) => {
+  try {
+    const { nome, nome_empresa, cpf, cnpj, codi_emp, celular, email, senha } = req.body;
+    const user = await User.create({ nome, nome_empresa, cpf, cnpj, codi_emp, celular, email, senha });
+    res.status(201).json(user);
+  } catch (error) {
+    console.error("Erro ao criar usuário:", error); // Log detalhado
+    res.status(500).json({ error: 'Erro ao criar usuário', details: error.message });
+  }
+});
+
+// Rota para listar todos os usuários
 app.get('/users', async (req, res) => {
   try {
     const users = await User.findAll();
@@ -41,14 +46,25 @@ app.get('/users', async (req, res) => {
   }
 });
 
-app.post('/user', async (req, res) => {
+// Login do usuário e consulta ao banco de dados ODBC
+app.post('/login', async (req, res) => {
   try {
-    const { nome, nome_empresa, cpf, cnpj, codi_emp, celular, email, senha } = req.body;
-    const user = await User.create({ nome, nome_empresa, cpf, cnpj, codi_emp, celular, email, senha });
-    res.status(201).json(user);
+    const { email, senha } = req.body;
+    const user = await User.findOne({ where: { email, senha } });
+
+    if (!user) {
+      return res.status(401).json({ error: 'Credenciais inválidas' });
+    }
+
+    const odbcConnection = await connectToOdbc();
+    const companyCode = user.codi_emp;
+    const query = `SELECT cgce_emp FROM bethadba.geempre WHERE codi_emp = ?`;
+    const result = await odbcConnection.query(query, [companyCode]);
+
+    res.json({ user, companyData: result });
   } catch (error) {
-    console.error("Erro ao criar usuário:", error); // Log detalhado
-    res.status(500).json({ error: 'Erro ao criar usuário', details: error.message });
+    console.error("Erro ao fazer login:", error); // Log detalhado
+    res.status(500).json({ error: 'Erro ao fazer login', details: error.message });
   }
 });
 
