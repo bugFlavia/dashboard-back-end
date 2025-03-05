@@ -30,7 +30,7 @@ app.post('/user', async (req, res) => {
     const user = await User.create({ nome, nome_empresa, cpf, cnpj, codi_emp, celular, email, senha });
     res.status(201).json(user);
   } catch (error) {
-    console.error("Erro ao criar usuário:", error); // Log detalhado
+    console.error("Erro ao criar usuário:", error);
     res.status(500).json({ error: 'Erro ao criar usuário', details: error.message });
   }
 });
@@ -41,7 +41,7 @@ app.get('/users', async (req, res) => {
     const users = await User.findAll();
     res.json(users);
   } catch (error) {
-    console.error("Erro ao listar usuários:", error); // Log detalhado
+    console.error("Erro ao listar usuários:", error);
     res.status(500).json({ error: 'Erro ao listar usuários', details: error.message });
   }
 });
@@ -63,13 +63,13 @@ app.post('/login', async (req, res) => {
 
     res.json({ user, companyData: result });
   } catch (error) {
-    console.error("Erro ao fazer login:", error); // Log detalhado
+    console.error("Erro ao fazer login:", error);
     res.status(500).json({ error: 'Erro ao fazer login', details: error.message });
   }
 });
 
 // Rota para somar todos os valores da coluna `vlor_lan` para a empresa logada
-app.get('/sum', async (req, res) => {
+app.get('/somaEntradas', async (req, res) => {
   try {
     const { email, senha } = req.body;
     const user = await User.findOne({ where: { email, senha } });
@@ -80,13 +80,35 @@ app.get('/sum', async (req, res) => {
 
     const odbcConnection = await connectToOdbc();
     const companyCode = user.codi_emp;
-    const query = `SELECT SUM(vlor_lan) AS total FROM bethadba.ctlancto WHERE codi_emp = ?`;
+    const query = `SELECT SUM(vprod_ent) AS total FROM bethadba.efentradas WHERE codi_emp = ?`;
     const result = await odbcConnection.query(query, [companyCode]);
 
     res.json({ total: result[0].total });
   } catch (error) {
-    console.error("Erro ao calcular a soma dos valores:", error); // Log detalhado
+    console.error("Erro ao calcular a soma dos valores:", error);
     res.status(500).json({ error: 'Erro ao calcular a soma dos valores', details: error.message });
+  }
+});
+
+// Rota para somar todos os valores da coluna `vprod_sai` para a empresa logada
+app.get('/somaSaidas', async (req, res) => {
+  try {
+    const { email, senha } = req.body;
+    const user = await User.findOne({ where: { email, senha } });
+
+    if (!user) {
+      return res.status(401).json({ error: 'Credenciais inválidas' });
+    }
+
+    const odbcConnection = await connectToOdbc();
+    const companyCode = user.codi_emp;
+    const query = `SELECT SUM(vprod_sai) AS total FROM bethadba.efsaidas WHERE codi_emp = ?`;
+    const result = await odbcConnection.query(query, [companyCode]);
+
+    res.json({ total: result[0].total });
+  } catch (error) {
+    console.error("Erro ao calcular a soma das vendas:", error);
+    res.status(500).json({ error: 'Erro ao calcular a soma das vendas', details: error.message });
   }
 });
 
