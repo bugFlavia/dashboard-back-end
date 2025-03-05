@@ -1,3 +1,5 @@
 /node_modules
 .vercel
 .env
+dashboard_remote.pem
+dashboard-remote.pem
