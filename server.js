@@ -65,18 +65,20 @@ app.get('/users', authMiddleware, async (req, res) => {
 
 app.post('/somaEntradas', authMiddleware, async (req, res) => {
   try {
-    const { mes, ano, dia } = req.body;
-    if (!mes || !ano) {
-      return res.status(400).json({ error: 'Mês e ano são obrigatórios' });
+    const { meses, ano } = req.body;
+    if (!meses || !ano || !Array.isArray(meses)) {
+      return res.status(400).json({ error: 'Ano e um array de meses são obrigatórios' });
     }
-    const diaInicio = dia ? dia : '01';
-    const diaFim = dia ? dia : getUltimoDiaMes(ano, mes);
-    const dataInicio = `${ano}-${mes}-${diaInicio}`;
-    const dataFim = `${ano}-${mes}-${diaFim}`;
+
+    const intervalos = meses.map(mes => {
+      const diaInicio = '01';
+      const diaFim = getUltimoDiaMes(ano, mes);
+      return `DATA_ENTRADA BETWEEN '${ano}-${mes}-${diaInicio}' AND '${ano}-${mes}-${diaFim}'`;
+    }).join(' OR ');
 
     const odbcConnection = await connectToOdbc();
-    const query = `SELECT SUM(vprod_ent) AS total FROM bethadba.efentradas WHERE codi_emp = ? AND DATA_ENTRADA BETWEEN ? AND ?`;
-    const result = await odbcConnection.query(query, [req.user.codi_emp, dataInicio, dataFim]);
+    const query = `SELECT SUM(vprod_ent) AS total FROM bethadba.efentradas WHERE codi_emp = ? AND (${intervalos})`;
+    const result = await odbcConnection.query(query, [req.user.codi_emp]);
     res.json({ total: result[0].total });
   } catch (error) {
     res.status(500).json({ error: 'Erro ao calcular a soma', details: error.message });
@@ -85,18 +87,20 @@ app.post('/somaEntradas', authMiddleware, async (req, res) => {
 
 app.post('/somaSaidas', authMiddleware, async (req, res) => {
   try {
-    const { mes, ano, dia } = req.body;
-    if (!mes || !ano) {
-      return res.status(400).json({ error: 'Mês e ano são obrigatórios' });
+    const { meses, ano } = req.body;
+    if (!meses || !ano || !Array.isArray(meses)) {
+      return res.status(400).json({ error: 'Ano e um array de meses são obrigatórios' });
     }
-    const diaInicio = dia ? dia : '01';
-    const diaFim = dia ? dia : getUltimoDiaMes(ano, mes);
-    const dataInicio = `${ano}-${mes}-${diaInicio}`;
-    const dataFim = `${ano}-${mes}-${diaFim}`;
+
+    const intervalos = meses.map(mes => {
+      const diaInicio = '01';
+      const diaFim = getUltimoDiaMes(ano, mes);
+      return `DATA_SAIDA BETWEEN '${ano}-${mes}-${diaInicio}' AND '${ano}-${mes}-${diaFim}'`;
+    }).join(' OR ');
 
     const odbcConnection = await connectToOdbc();
-    const query = `SELECT SUM(vprod_sai) AS total FROM bethadba.efsaidas WHERE codi_emp = ? AND DATA_SAIDA BETWEEN ? AND ?`;
-    const result = await odbcConnection.query(query, [req.user.codi_emp, dataInicio, dataFim]);
+    const query = `SELECT SUM(vprod_sai) AS total FROM bethadba.efsaidas WHERE codi_emp = ? AND (${intervalos})`;
+    const result = await odbcConnection.query(query, [req.user.codi_emp]);
     res.json({ total: result[0].total });
   } catch (error) {
     res.status(500).json({ error: 'Erro ao calcular a soma', details: error.message });
