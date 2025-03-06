@@ -90,7 +90,7 @@ app.get('/somaEntradas', async (req, res) => {
   }
 });
 
-// Rota para somar todos os valores da coluna `vprod_sai` para a empresa logada
+// Rota para somar todos os valores da coluna `vprod_sai` para a empresa logada após 2025-01-01
 app.get('/somaSaidas', async (req, res) => {
   try {
     const { email, senha } = req.body;
@@ -102,7 +102,7 @@ app.get('/somaSaidas', async (req, res) => {
 
     const odbcConnection = await connectToOdbc();
     const companyCode = user.codi_emp;
-    const query = `SELECT SUM(vprod_sai) AS total FROM bethadba.efsaidas WHERE codi_emp = ?`;
+    const query = `SELECT SUM(vprod_sai) AS total FROM bethadba.efsaidas WHERE codi_emp = ? AND DATA_SAIDA > '2025-01-01'`;
     const result = await odbcConnection.query(query, [companyCode]);
 
     res.json({ total: result[0].total });
