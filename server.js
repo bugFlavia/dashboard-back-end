@@ -31,6 +31,11 @@ function authMiddleware(req, res, next) {
   }
 }
 
+// Função para calcular o último dia do mês
+function getUltimoDiaMes(ano, mes) {
+  return new Date(ano, mes, 0).getDate();
+}
+
 // Rota de login
 app.post('/login', async (req, res) => {
   try {
@@ -40,7 +45,7 @@ app.post('/login', async (req, res) => {
       return res.status(401).json({ error: 'Credenciais inválidas' });
     }
 
-    const token = jwt.sign({ id: user.id, email: user.email }, SECRET_KEY, { expiresIn: '1h' });
+    const token = jwt.sign({ id: user.id, email: user.email, codi_emp: user.codi_emp }, SECRET_KEY, { expiresIn: '1h' });
     res.cookie('token', token, { httpOnly: true, secure: process.env.NODE_ENV === 'production' });
     res.json({ message: 'Login bem-sucedido' });
   } catch (error) {
@@ -58,22 +63,40 @@ app.get('/users', authMiddleware, async (req, res) => {
   }
 });
 
-app.get('/somaEntradas', authMiddleware, async (req, res) => {
+app.post('/somaEntradas', authMiddleware, async (req, res) => {
   try {
+    const { mes, ano, dia } = req.body;
+    if (!mes || !ano) {
+      return res.status(400).json({ error: 'Mês e ano são obrigatórios' });
+    }
+    const diaInicio = dia ? dia : '01';
+    const diaFim = dia ? dia : getUltimoDiaMes(ano, mes);
+    const dataInicio = `${ano}-${mes}-${diaInicio}`;
+    const dataFim = `${ano}-${mes}-${diaFim}`;
+
     const odbcConnection = await connectToOdbc();
-    const query = `SELECT SUM(vprod_ent) AS total FROM bethadba.efentradas WHERE codi_emp = ?`;
-    const result = await odbcConnection.query(query, [req.user.id]);
+    const query = `SELECT SUM(vprod_ent) AS total FROM bethadba.efentradas WHERE codi_emp = ? AND DATA_ENTRADA BETWEEN ? AND ?`;
+    const result = await odbcConnection.query(query, [req.user.codi_emp, dataInicio, dataFim]);
     res.json({ total: result[0].total });
   } catch (error) {
     res.status(500).json({ error: 'Erro ao calcular a soma', details: error.message });
   }
 });
 
-app.get('/somaSaidas', authMiddleware, async (req, res) => {
+app.post('/somaSaidas', authMiddleware, async (req, res) => {
   try {
+    const { mes, ano, dia } = req.body;
+    if (!mes || !ano) {
+      return res.status(400).json({ error: 'Mês e ano são obrigatórios' });
+    }
+    const diaInicio = dia ? dia : '01';
+    const diaFim = dia ? dia : getUltimoDiaMes(ano, mes);
+    const dataInicio = `${ano}-${mes}-${diaInicio}`;
+    const dataFim = `${ano}-${mes}-${diaFim}`;
+
     const odbcConnection = await connectToOdbc();
-    const query = `SELECT SUM(vprod_sai) AS total FROM bethadba.efsaidas WHERE codi_emp = ? AND DATA_SAIDA > '2025-01-01'`;
-    const result = await odbcConnection.query(query, [req.user.id]);
+    const query = `SELECT SUM(vprod_sai) AS total FROM bethadba.efsaidas WHERE codi_emp = ? AND DATA_SAIDA BETWEEN ? AND ?`;
+    const result = await odbcConnection.query(query, [req.user.codi_emp, dataInicio, dataFim]);
     res.json({ total: result[0].total });
   } catch (error) {
     res.status(500).json({ error: 'Erro ao calcular a soma', details: error.message });
