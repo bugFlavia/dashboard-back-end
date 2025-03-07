@@ -37,10 +37,20 @@ function getUltimoDiaMes(ano, mes) {
 }
 
 // Lista de codi_nat que devem ser excluídos da soma
-const codiNatExcluidos = [
-  '1.116', '1.151', '1.152', '1.153', '1.154', '1.201', '1.202', '1.203', '1.204', '1.205', '1.206', '1.207', '1.208', '1.209', '1.408', '1.409', '1.410', '1.411', '1.414', '1.415', '1.451', '1.452', '1.501', '1.503', '1.504', '1.552', '1.553', '1.554', '1.555', '1.556', '1.557', '1.601', '1.602', '1.603', '1.604', '1.605', '1.658', '1.659', '1.660', '1.661', '1.662', '1.663', '1.664', '1.901', '1.902', '1.903', '1.904', '1.905', '1.906', '1.907', '1.908', '1.909', '1.913', '1.914', '1.915', '1.916', '1.917', '1.918', '1.919', '1.921', '1.922', '1.923', '1.924', '1.925', '1.926', '1.931',
-  '2.116', '2.151', '2.152', '2.153', '2.154', '2.201', '2.202', '2.203', '2.204', '2.205', '2.206', '2.207', '2.208', '2.209', '2.408', '2.409', '2.410', '2.411', '2.414', '2.415', '2.551', '2.552', '2.501', '2.503', '2.504', '2.552', '2.553', '2.554', '2.555', '2.556', '2.557', '2.603', '2.658', '2.659', '2.660', '2.661', '2.662', '2.663', '2.664', '2.901', '2.902', '2.903', '2.904', '2.905', '2.906', '2.907', '2.908', '2.909', '2.913', '2.914', '2.915', '2.916', '2.917', '2.918', '2.919', '2.921', '2.922', '2.923', '2.924', '2.925', '2.931'
-]; // Lista completa mantida
+const codiNatExcluidos = new Set([
+  1116, 1151, 1152, 1153, 1154, 1201, 1202, 1203, 1204, 1205, 1206, 1207, 1208, 1209,
+  1408, 1409, 1410, 1411, 1414, 1415, 1451, 1452, 1501, 1503, 1504, 1552, 1553, 1554,
+  1555, 1556, 1557, 1601, 1602, 1603, 1604, 1605, 1658, 1659, 1660, 1661, 1662, 1663,
+  1664, 1901, 1902, 1903, 1904, 1905, 1906, 1907, 1908, 1909, 1913, 1914, 1915, 1916,
+  1917, 1918, 1919, 1921, 1922, 1923, 1924, 1925, 1926, 1931
+]);
+
+// Função para filtrar codi_nat e calcular soma excluída
+function filtrarResultados(resultados) {
+  const excluidos = resultados.filter(row => codiNatExcluidos.has(parseInt(row.codi_nat)));
+  const somaExcluida = excluidos.reduce((acc, row) => acc + (row.vprod_ent || row.vprod_sai), 0);
+  return { filtrados: resultados.filter(row => !codiNatExcluidos.has(parseInt(row.codi_nat))), somaExcluida, excluidos };
+}
 
 // Rota de login
 app.post('/login', async (req, res) => {
@@ -58,6 +68,16 @@ app.post('/login', async (req, res) => {
   }
 });
 
+// Rota para listar todos os usuários
+app.get('/users', authMiddleware, async (req, res) => {
+  try {
+    const users = await User.findAll();
+    res.json(users);
+  } catch (error) {
+    res.status(500).json({ error: 'Erro ao listar usuários', details: error.message });
+  }
+});
+
 // Rota somaEntradas
 app.post('/somaEntradas', authMiddleware, async (req, res) => {
   try {
@@ -66,11 +86,12 @@ app.post('/somaEntradas', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'Ano e um array de meses são obrigatórios' });
     }
     const intervalos = meses.map(mes => `DATA_ENTRADA BETWEEN '${ano}-${mes}-01' AND '${ano}-${mes}-${getUltimoDiaMes(ano, mes)}'`).join(' OR ');
-    const codiNatFiltro = codiNatExcluidos.map(nat => `'${nat}'`).join(',');
-    const query = `SELECT SUM(vprod_ent) AS total FROM bethadba.efentradas WHERE codi_emp = ? AND (${intervalos}) AND codi_nat NOT IN (${codiNatFiltro})`;
+    const query = `SELECT vprod_ent, codi_nat FROM bethadba.efentradas WHERE codi_emp = ? AND (${intervalos})`;
     const odbcConnection = await connectToOdbc();
     const result = await odbcConnection.query(query, [req.user.codi_emp]);
-    res.json({ total: result[0]?.total || 0 });
+    const { filtrados, somaExcluida, excluidos } = filtrarResultados(result);
+    const total = filtrados.reduce((acc, row) => acc + row.vprod_ent, 0);
+    res.json({ total, somaExcluida, cfopsExcluidos: excluidos.map(row => row.codi_nat) });
   } catch (error) {
     res.status(500).json({ error: 'Erro ao calcular a soma', details: error.message });
   }
@@ -84,11 +105,12 @@ app.post('/somaSaidas', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'Ano e um array de meses são obrigatórios' });
     }
     const intervalos = meses.map(mes => `DATA_SAIDA BETWEEN '${ano}-${mes}-01' AND '${ano}-${mes}-${getUltimoDiaMes(ano, mes)}'`).join(' OR ');
-    const codiNatFiltro = codiNatExcluidos.map(nat => `'${nat}'`).join(',');
-    const query = `SELECT SUM(vprod_sai) AS total FROM bethadba.efsaidas WHERE codi_emp = ? AND (${intervalos}) AND codi_nat NOT IN (${codiNatFiltro})`;
+    const query = `SELECT vprod_sai, codi_nat FROM bethadba.efsaidas WHERE codi_emp = ? AND (${intervalos})`;
     const odbcConnection = await connectToOdbc();
     const result = await odbcConnection.query(query, [req.user.codi_emp]);
-    res.json({ total: result[0]?.total || 0 });
+    const { filtrados, somaExcluida, excluidos } = filtrarResultados(result);
+    const total = filtrados.reduce((acc, row) => acc + row.vprod_sai, 0);
+    res.json({ total, somaExcluida, cfopsExcluidos: excluidos.map(row => row.codi_nat) });
   } catch (error) {
     res.status(500).json({ error: 'Erro ao calcular a soma', details: error.message });
   }
