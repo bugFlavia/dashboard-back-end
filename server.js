@@ -44,7 +44,7 @@ const codiNatExcluidos = new Set([
 // Função para filtrar codi_nat e calcular soma excluída
 function filtrarResultados(resultados) {
   const excluidos = resultados.filter(row => codiNatExcluidos.has(parseInt(row.codi_nat)));
-  const somaExcluida = excluidos.reduce((acc, row) => acc + (row.vprod_ent || row.vprod_sai), 0);
+  const somaExcluida = excluidos.reduce((acc, row) => acc + (row.vcon_ent || row.vprod_sai), 0);
   return { filtrados: resultados.filter(row => !codiNatExcluidos.has(parseInt(row.codi_nat))), somaExcluida, excluidos };
 }
 
@@ -82,11 +82,11 @@ app.post('/somaEntradas', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'Ano e um array de meses são obrigatórios' });
     }
     const intervalos = meses.map(mes => `DATA_ENTRADA BETWEEN '${ano}-${mes}-01' AND '${ano}-${mes}-${getUltimoDiaMes(ano, mes)}'`).join(' OR ');
-    const query = `SELECT vprod_ent, codi_nat FROM bethadba.efentradas WHERE codi_emp = ? AND (${intervalos})`;
+    const query = `SELECT vcon_ent, codi_nat FROM bethadba.efentradas WHERE codi_emp = ? AND (${intervalos})`;
     const odbcConnection = await connectToOdbc();
     const result = await odbcConnection.query(query, [req.user.codi_emp]);
     const { filtrados, somaExcluida, excluidos } = filtrarResultados(result);
-    const total = filtrados.reduce((acc, row) => acc + row.vprod_ent, 0);
+    const total = filtrados.reduce((acc, row) => acc + row.vcon_ent, 0);
     res.json({ total, somaExcluida, cfopsExcluidos: excluidos.map(row => row.codi_nat) });
   } catch (error) {
     res.status(500).json({ error: 'Erro ao calcular a soma', details: error.message });
