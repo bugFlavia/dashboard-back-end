@@ -44,7 +44,7 @@ const codiNatExcluidos = new Set([
 // Função para filtrar codi_nat e calcular soma excluída
 function filtrarResultados(resultados) {
   const excluidos = resultados.filter(row => codiNatExcluidos.has(parseInt(row.codi_nat)));
-  const somaExcluida = excluidos.reduce((acc, row) => acc + (row.vcon_ent || row.vprod_sai), 0);
+  const somaExcluida = excluidos.reduce((acc, row) => acc + (row.vcon_ent || row.vcon_sai), 0);
   return { filtrados: resultados.filter(row => !codiNatExcluidos.has(parseInt(row.codi_nat))), somaExcluida, excluidos };
 }
 
@@ -101,12 +101,28 @@ app.post('/somaSaidas', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'Ano e um array de meses são obrigatórios' });
     }
     const intervalos = meses.map(mes => `DATA_SAIDA BETWEEN '${ano}-${mes}-01' AND '${ano}-${mes}-${getUltimoDiaMes(ano, mes)}'`).join(' OR ');
-    const query = `SELECT vprod_sai, codi_nat FROM bethadba.efsaidas WHERE codi_emp = ? AND (${intervalos})`;
+    const query = `SELECT vcon_sai, codi_nat FROM bethadba.efsaidas WHERE codi_emp = ? AND (${intervalos})`;
     const odbcConnection = await connectToOdbc();
     const result = await odbcConnection.query(query, [req.user.codi_emp]);
     const { filtrados, somaExcluida, excluidos } = filtrarResultados(result);
-    const total = filtrados.reduce((acc, row) => acc + row.vprod_sai, 0);
+    const total = filtrados.reduce((acc, row) => acc + row.vcon_sai, 0);
     res.json({ total, somaExcluida, cfopsExcluidos: excluidos.map(row => row.codi_nat) });
+  } catch (error) {
+    res.status(500).json({ error: 'Erro ao calcular a soma', details: error.message });
+  }
+});
+
+app.post('/inss', authMiddleware, async (req, res) => {
+  try {
+    const { meses, ano } = req.body;
+    if (!meses || !ano || !Array.isArray(meses)) {
+      return res.status(400).json({ error: 'Ano e um array de meses são obrigatórios' });
+    }
+    const intervalos = meses.map(mes => `data_sim BETWEEN '${ano}-${mes}-01' AND '${ano}-${mes}-${getUltimoDiaMes(ano, mes)}'`).join(' OR ');
+    const query = `SELECT COALESCE(SUM(sdev_sim), 0) AS total FROM bethadba.efsdoimp WHERE codi_emp = ? AND (${intervalos}) AND codi_imp = 1`;
+    const odbcConnection = await connectToOdbc();
+    const [result] = await odbcConnection.query(query, [req.user.codi_emp]);
+    res.json({ total: result.total });
   } catch (error) {
     res.status(500).json({ error: 'Erro ao calcular a soma', details: error.message });
   }
