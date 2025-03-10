@@ -128,6 +128,22 @@ app.post('/inss', authMiddleware, async (req, res) => {
   }
 });
 
+app.post('/pis', authMiddleware, async (req, res) => {
+  try {
+    const { meses, ano } = req.body;
+    if (!meses || !ano || !Array.isArray(meses)) {
+      return res.status(400).json({ error: 'Ano e um array de meses são obrigatórios' });
+    }
+    const intervalos = meses.map(mes => `data_sim BETWEEN '${ano}-${mes}-01' AND '${ano}-${mes}-${getUltimoDiaMes(ano, mes)}'`).join(' OR ');
+    const query = `SELECT COALESCE(SUM(sdev_sim), 0) AS total FROM bethadba.efsdoimp WHERE codi_emp = ? AND (${intervalos}) AND codi_imp = 17`;
+    const odbcConnection = await connectToOdbc();
+    const [result] = await odbcConnection.query(query, [req.user.codi_emp]);
+    res.json({ total: result.total });
+  } catch (error) {
+    res.status(500).json({ error: 'Erro ao calcular a soma', details: error.message });
+  }
+});
+
 // Inicializando o servidor
 if (require.main === module) {
   app.listen(port, () => {
