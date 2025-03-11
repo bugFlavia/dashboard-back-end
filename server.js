@@ -160,6 +160,40 @@ app.post('/cofins', authMiddleware, async (req, res) => {
   }
 });
 
+app.post('/valorFolha', authMiddleware, async (req, res) => {
+  try {
+    const { meses, ano } = req.body;
+    if (!meses || !ano || !Array.isArray(meses)) {
+      return res.status(400).json({ error: 'Ano e um array de meses são obrigatórios' });
+    }
+    
+    // Criando as condições para evitar SQL Injection
+    const conditions = meses.map(() => `competencia BETWEEN ? AND ?`).join(' OR ');
+    const params = meses.flatMap(mes => [
+      `${ano}-${mes}-01`,
+      `${ano}-${mes}-${getUltimoDiaMes(ano, mes)}`
+    ]);
+    
+    const query = `
+      SELECT i_empregados, competencia, SUM(proventos - descontos) AS total
+      FROM (
+        SELECT DISTINCT i_empregados, competencia, proventos, descontos
+        FROM bethadba.fobasesserv 
+        WHERE codi_emp = ? AND (${conditions})
+      ) AS unique_entries
+      GROUP BY i_empregados, competencia`;
+    
+    const odbcConnection = await connectToOdbc();
+    const result = await odbcConnection.query(query, [req.user.codi_emp, ...params]);
+    
+    // Somando os totais por funcionário e mês
+    const total = result.reduce((acc, row) => acc + row.total, 0);
+    
+    res.json({ total });
+  } catch (error) {
+    res.status(500).json({ error: 'Erro ao calcular a soma', details: error.message });
+  }
+});
 // Inicializando o servidor
 if (require.main === module) {
   app.listen(port, () => {
