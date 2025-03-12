@@ -166,34 +166,71 @@ app.post('/valorFolha', authMiddleware, async (req, res) => {
     if (!meses || !ano || !Array.isArray(meses)) {
       return res.status(400).json({ error: 'Ano e um array de meses são obrigatórios' });
     }
-    
-    // Criando as condições para evitar SQL Injection
-    const conditions = meses.map(() => `competencia BETWEEN ? AND ?`).join(' OR ');
-    const params = meses.flatMap(mes => [
-      `${ano}-${mes}-01`,
-      `${ano}-${mes}-${getUltimoDiaMes(ano, mes)}`
-    ]);
-    
-    const query = `
-      SELECT i_empregados, competencia, SUM(proventos - descontos) AS total
-      FROM (
-        SELECT DISTINCT i_empregados, competencia, proventos, descontos
-        FROM bethadba.fobasesserv 
-        WHERE codi_emp = ? AND (${conditions})
-      ) AS unique_entries
-      GROUP BY i_empregados, competencia`;
-    
+
     const odbcConnection = await connectToOdbc();
-    const result = await odbcConnection.query(query, [req.user.codi_emp, ...params]);
-    
-    // Somando os totais por funcionário e mês
-    const total = result.reduce((acc, row) => acc + row.total, 0);
-    
-    res.json({ total });
+
+    let totalGeral = 0;
+    const detalhesFuncionarios = [];
+
+    const queryFuncionarios = `
+      SELECT DISTINCT i_empregados 
+      FROM bethadba.fobasesserv 
+      WHERE codi_emp = ? AND competencia LIKE ?`;
+
+    for (const mes of meses) {
+      const competencia = `${ano}-${mes.toString().padStart(2, '0')}%`;
+      const funcionarios = await odbcConnection.query(queryFuncionarios, [req.user.codi_emp, competencia]);
+
+      for (const { i_empregados } of funcionarios) {
+        const queryMovimentos = `
+          SELECT DISTINCT i_eventos, valor_cal, prov_desc 
+          FROM bethadba.fomovtoserv 
+          WHERE codi_emp = ? AND i_empregados = ? AND data LIKE ?`;
+
+        const dataFiltro = `${ano}-${mes.toString().padStart(2, '0')}%`;
+        const movimentos = await odbcConnection.query(queryMovimentos, [req.user.codi_emp, i_empregados, dataFiltro]);
+
+        const eventosIgnorados = new Set([9176, 9177, 9178]);
+        const eventosUnicos = new Set();
+        let totalProventos = 0;
+        let totalDescontos = 0;
+
+        movimentos.forEach(({ i_eventos, valor_cal, prov_desc }) => {
+          if (eventosIgnorados.has(i_eventos)) return; // Ignora esses eventos
+
+          const valor = Number(valor_cal) || 0; // Garante que seja um número válido
+
+          if (!eventosUnicos.has(i_eventos)) {
+            eventosUnicos.add(i_eventos);
+            if (prov_desc === "P") {
+              totalProventos += valor;
+            } else if (prov_desc === "D") {
+              totalDescontos += valor;
+            }
+          }
+        });
+
+        const totalFuncionario = totalProventos - totalDescontos;
+        totalGeral += totalFuncionario;
+
+        detalhesFuncionarios.push({
+          i_empregados,
+          totalProventos,
+          totalDescontos,
+          totalFuncionario
+        });
+
+        console.log(`Funcionário ${i_empregados} - Proventos: ${totalProventos}, Descontos: ${totalDescontos}, Total: ${totalFuncionario}`);
+      }
+    }
+
+    res.json({ totalGeral, detalhesFuncionarios });
   } catch (error) {
-    res.status(500).json({ error: 'Erro ao calcular a soma', details: error.message });
+    console.error("Erro ao calcular a soma:", error);
+    res.status(500).json({ error: "Erro ao calcular a soma", details: error.message });
   }
 });
+
 // Inicializando o servidor
 if (require.main === module) {
   app.listen(port, () => {
