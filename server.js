@@ -168,8 +168,9 @@ app.post('/valorFolha', authMiddleware, async (req, res) => {
     }
 
     const odbcConnection = await connectToOdbc();
-
     let totalGeral = 0;
+    let totalProventosGeral = 0;
+    let totalDescontosGeral = 0;
     const detalhesFuncionarios = [];
 
     const queryFuncionarios = `
@@ -183,7 +184,7 @@ app.post('/valorFolha', authMiddleware, async (req, res) => {
 
       for (const { i_empregados } of funcionarios) {
         const queryMovimentos = `
-          SELECT DISTINCT i_eventos, valor_cal, prov_desc 
+          SELECT DISTINCT i_eventos, VALOR_CAL, prov_desc 
           FROM bethadba.fomovtoserv 
           WHERE codi_emp = ? AND i_empregados = ? AND data LIKE ?`;
 
@@ -194,11 +195,24 @@ app.post('/valorFolha', authMiddleware, async (req, res) => {
         const eventosUnicos = new Set();
         let totalProventos = 0;
         let totalDescontos = 0;
+        let valorEvento1 = 0;
 
-        movimentos.forEach(({ i_eventos, valor_cal, prov_desc }) => {
-          if (eventosIgnorados.has(i_eventos)) return; // Ignora esses eventos
+        // Primeiro, encontramos o valor do evento 1
+        movimentos.forEach(({ i_eventos, VALOR_CAL }) => {
+          if (i_eventos === 1) {
+            valorEvento1 = Number(VALOR_CAL) || 0;
+          }
+        });
 
-          const valor = Number(valor_cal) || 0; // Garante que seja um número válido
+        movimentos.forEach(({ i_eventos, VALOR_CAL, prov_desc }) => {
+          if (eventosIgnorados.has(i_eventos)) return;
+
+          let valor = Number(VALOR_CAL) || 0; 
+
+          // Se for evento 349, substituir pelo cálculo de 10% do evento 1
+          if (i_eventos === 349) {
+            valor = valorEvento1 * 0.1;
+          }
 
           if (!eventosUnicos.has(i_eventos)) {
             eventosUnicos.add(i_eventos);
@@ -210,21 +224,37 @@ app.post('/valorFolha', authMiddleware, async (req, res) => {
           }
         });
 
-        const totalFuncionario = totalProventos - totalDescontos;
+        // Calcula o total final e aplica a regra de não permitir valores negativos
+        let totalFuncionario = totalProventos - totalDescontos;
+        totalFuncionario = totalFuncionario < 0 ? 0 : parseFloat(totalFuncionario.toFixed(2));
+
+        // Acumulando os totais gerais
+        totalProventosGeral += totalProventos;
+        totalDescontosGeral += totalDescontos;
         totalGeral += totalFuncionario;
+
+        totalProventosGeral = parseFloat(totalProventosGeral.toFixed(2));
+        totalDescontosGeral = parseFloat(totalDescontosGeral.toFixed(2));
+        totalGeral = parseFloat(totalGeral.toFixed(2));
 
         detalhesFuncionarios.push({
           i_empregados,
-          totalProventos,
-          totalDescontos,
+          totalProventos: parseFloat(totalProventos.toFixed(2)),
+          totalDescontos: parseFloat(totalDescontos.toFixed(2)),
           totalFuncionario
         });
 
-        console.log(`Funcionário ${i_empregados} - Proventos: ${totalProventos}, Descontos: ${totalDescontos}, Total: ${totalFuncionario}`);
+        console.log(`Funcionário ${i_empregados} - Proventos: ${totalProventos.toFixed(2)}, Descontos: ${totalDescontos.toFixed(2)}, Total: ${totalFuncionario}`);
       }
     }
 
-    res.json({ totalGeral, detalhesFuncionarios });
+    res.json({ 
+      totalGeral, 
+      totalProventosGeral, 
+      totalDescontosGeral, 
+      detalhesFuncionarios 
+    });
+
   } catch (error) {
     console.error("Erro ao calcular a soma:", error);
     res.status(500).json({ error: "Erro ao calcular a soma", details: error.message });
