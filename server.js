@@ -195,24 +195,12 @@ app.post('/valorFolha', authMiddleware, async (req, res) => {
         const eventosUnicos = new Set();
         let totalProventos = 0;
         let totalDescontos = 0;
-        let valorEvento1 = 0;
 
-        // Primeiro, encontramos o valor do evento 1
-        movimentos.forEach(({ i_eventos, VALOR_CAL }) => {
-          if (i_eventos === 1) {
-            valorEvento1 = Number(VALOR_CAL) || 0;
-          }
-        });
-
+        // Processamos os eventos sem modificar valores
         movimentos.forEach(({ i_eventos, VALOR_CAL, prov_desc }) => {
           if (eventosIgnorados.has(i_eventos)) return;
 
           let valor = Number(VALOR_CAL) || 0; 
-
-          // Se for evento 349, substituir pelo cálculo de 10% do evento 1
-          if (i_eventos === 349) {
-            valor = valorEvento1 * 0.1;
-          }
 
           if (!eventosUnicos.has(i_eventos)) {
             eventosUnicos.add(i_eventos);
@@ -258,6 +246,37 @@ app.post('/valorFolha', authMiddleware, async (req, res) => {
   } catch (error) {
     console.error("Erro ao calcular a soma:", error);
     res.status(500).json({ error: "Erro ao calcular a soma", details: error.message });
+  }
+});
+
+app.post('/irrf', authMiddleware, async (req, res) => {
+  try {
+    const { meses, ano } = req.body;
+    if (!meses || !ano || !Array.isArray(meses)) {
+      return res.status(400).json({ error: 'Ano e um array de meses são obrigatórios' });
+    }
+
+    const odbcConnection = await connectToOdbc();
+    
+    // Construção dos intervalos de datas para cada mês fornecido
+    const intervalos = meses.map(mes => {
+      const primeiroDia = `${ano}-${mes.toString().padStart(2, '0')}-01`;
+      const ultimoDia = `${ano}-${mes.toString().padStart(2, '0')}-${getUltimoDiaMes(ano, mes)}`;
+      return `(periodo_inicio >= '${primeiroDia}' AND periodo_fim <= '${ultimoDia}')`;
+    }).join(' OR ');
+
+    const query = `
+      SELECT COALESCE(SUM(valor), 0) AS total 
+      FROM bethadba.focalcirrf 
+      WHERE codi_emp = ? AND (${intervalos})
+    `;
+
+    const [result] = await odbcConnection.query(query, [req.user.codi_emp]);
+    
+    res.json({ total: result.total });
+  } catch (error) {
+    console.error("Erro ao calcular o IRRF:", error);
+    res.status(500).json({ error: "Erro ao calcular o IRRF", details: error.message });
   }
 });
 
