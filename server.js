@@ -112,7 +112,7 @@ app.post('/somaSaidas', authMiddleware, async (req, res) => {
   }
 });
 
-app.post('/inss', authMiddleware, async (req, res) => {
+app.post('/icms', authMiddleware, async (req, res) => {
   try {
     const { meses, ano } = req.body;
     if (!meses || !ano || !Array.isArray(meses)) {
@@ -279,6 +279,38 @@ app.post('/irrf', authMiddleware, async (req, res) => {
     res.status(500).json({ error: "Erro ao calcular o IRRF", details: error.message });
   }
 });
+
+app.post('/inss', authMiddleware, async (req, res) => {
+  try {
+    const { meses, ano } = req.body;
+    if (!meses || !ano || !Array.isArray(meses)) {
+      return res.status(400).json({ error: 'Ano e um array de meses são obrigatórios' });
+    }
+
+    const odbcConnection = await connectToOdbc();
+    
+    // Construção dos intervalos de datas para cada mês fornecido
+    const intervalos = meses.map(mes => {
+      const primeiroDia = `${ano}-${mes.toString().padStart(2, '0')}-01`;
+      const ultimoDia = `${ano}-${mes.toString().padStart(2, '0')}-${getUltimoDiaMes(ano, mes)}`;
+      return `(competencia BETWEEN '${primeiroDia}' AND '${ultimoDia}')`;
+    }).join(' OR ');
+
+    const query = `
+      SELECT COALESCE(SUM(total_guia), 0) AS total 
+      FROM bethadba.foguiainss 
+      WHERE codi_emp = ? AND (${intervalos})
+    `;
+
+    const [result] = await odbcConnection.query(query, [req.user.codi_emp]);
+    
+    res.json({ total: result.total });
+  } catch (error) {
+    console.error("Erro ao calcular o INSS:", error);
+    res.status(500).json({ error: "Erro ao calcular o INSS", details: error.message });
+  }
+});
+
 
 // Inicializando o servidor
 if (require.main === module) {
