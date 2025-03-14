@@ -40,6 +40,14 @@ const User = sequelize.define('User', {
     type: DataTypes.STRING,
     allowNull: false
   },
+  matriz_id: {
+    type: DataTypes.INTEGER,
+    allowNull: true,  // Pode ser null para matrizes
+    references: {
+      model: 'User',
+      key: 'id',
+    },
+  }
 }, {
   tableName: 'users',
   timestamps: false
