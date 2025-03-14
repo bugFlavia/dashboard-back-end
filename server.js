@@ -163,91 +163,55 @@ app.post('/cofins', authMiddleware, async (req, res) => {
 app.post('/valorFolha', authMiddleware, async (req, res) => {
   try {
     const { meses, ano } = req.body;
+
     if (!meses || !ano || !Array.isArray(meses)) {
-      return res.status(400).json({ error: 'Ano e um array de meses são obrigatórios' });
+      return res.status(400).json({ error: 'Ano e um array de meses são obrigatórios.' });
     }
 
     const odbcConnection = await connectToOdbc();
-    let totalGeral = 0;
-    let totalProventosGeral = 0;
-    let totalDescontosGeral = 0;
-    const detalhesFuncionarios = [];
-
-    const queryFuncionarios = `
-      SELECT DISTINCT i_empregados 
-      FROM bethadba.fobasesserv 
-      WHERE codi_emp = ? AND competencia LIKE ?`;
+    let totalProventos = 0;
+    let totalDescontos = 0;
 
     for (const mes of meses) {
-      const competencia = `${ano}-${mes.toString().padStart(2, '0')}%`;
-      const funcionarios = await odbcConnection.query(queryFuncionarios, [req.user.codi_emp, competencia]);
+      const primeiroDia = `${ano}-${mes.toString().padStart(2, '0')}-01`;
+      const ultimoDia = `${ano}-${mes.toString().padStart(2, '0')}-${getUltimoDiaMes(ano, mes)}`;
 
-      for (const { i_empregados } of funcionarios) {
-        const queryMovimentos = `
-          SELECT DISTINCT i_eventos, VALOR_CAL, prov_desc 
-          FROM bethadba.fomovtoserv 
-          WHERE codi_emp = ? AND i_empregados = ? AND data LIKE ?`;
+      const query = `
+        SELECT VALOR_CAL, PROV_DESC
+        FROM bethadba.fomovtoserv
+        WHERE codi_emp = ?
+          AND DATA BETWEEN ? AND ?
+          AND RATEIO = 0
+          AND TIPO_PROCES = 11
+          AND I_EVENTOS NOT IN (9176, 9177, 9178)
+      `;
 
-        const dataFiltro = `${ano}-${mes.toString().padStart(2, '0')}%`;
-        const movimentos = await odbcConnection.query(queryMovimentos, [req.user.codi_emp, i_empregados, dataFiltro]);
+      const resultados = await odbcConnection.query(query, [req.user.codi_emp, primeiroDia, ultimoDia]);
 
-        const eventosIgnorados = new Set([9176, 9177, 9178]);
-        const eventosUnicos = new Set();
-        let totalProventos = 0;
-        let totalDescontos = 0;
+      resultados.forEach(({ VALOR_CAL, PROV_DESC }) => {
+        const valor = parseFloat(VALOR_CAL) || 0;
 
-        // Processamos os eventos sem modificar valores
-        movimentos.forEach(({ i_eventos, VALOR_CAL, prov_desc }) => {
-          if (eventosIgnorados.has(i_eventos)) return;
-
-          let valor = Number(VALOR_CAL) || 0; 
-
-          if (!eventosUnicos.has(i_eventos)) {
-            eventosUnicos.add(i_eventos);
-            if (prov_desc === "P") {
-              totalProventos += valor;
-            } else if (prov_desc === "D") {
-              totalDescontos += valor;
-            }
-          }
-        });
-
-        // Calcula o total final e aplica a regra de não permitir valores negativos
-        let totalFuncionario = totalProventos - totalDescontos;
-        totalFuncionario = totalFuncionario < 0 ? 0 : parseFloat(totalFuncionario.toFixed(2));
-
-        // Acumulando os totais gerais
-        totalProventosGeral += totalProventos;
-        totalDescontosGeral += totalDescontos;
-        totalGeral += totalFuncionario;
-
-        totalProventosGeral = parseFloat(totalProventosGeral.toFixed(2));
-        totalDescontosGeral = parseFloat(totalDescontosGeral.toFixed(2));
-        totalGeral = parseFloat(totalGeral.toFixed(2));
-
-        detalhesFuncionarios.push({
-          i_empregados,
-          totalProventos: parseFloat(totalProventos.toFixed(2)),
-          totalDescontos: parseFloat(totalDescontos.toFixed(2)),
-          totalFuncionario
-        });
-
-        console.log(`Funcionário ${i_empregados} - Proventos: ${totalProventos.toFixed(2)}, Descontos: ${totalDescontos.toFixed(2)}, Total: ${totalFuncionario}`);
-      }
+        if (PROV_DESC === 'P') {
+          totalProventos += valor;
+        } else if (PROV_DESC === 'D') {
+          totalDescontos += valor;
+        }
+      });
     }
 
-    res.json({ 
-      totalGeral, 
-      totalProventosGeral, 
-      totalDescontosGeral, 
-      detalhesFuncionarios 
-    });
+    const totalGeral = totalProventos - totalDescontos;
 
+    res.json({
+      totalProventos: parseFloat(totalProventos.toFixed(2)),
+      totalDescontos: parseFloat(totalDescontos.toFixed(2)),
+      totalGeral: parseFloat(totalGeral.toFixed(2)),
+    });
   } catch (error) {
-    console.error("Erro ao calcular a soma:", error);
-    res.status(500).json({ error: "Erro ao calcular a soma", details: error.message });
+    console.error('Erro ao processar múltiplos meses em valorFolha:', error);
+    res.status(500).json({ error: 'Erro ao processar múltiplos meses.', detalhes: error.message });
   }
 });
+
 
 app.post('/irrf', authMiddleware, async (req, res) => {
   try {
