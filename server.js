@@ -281,15 +281,27 @@ app.post('/fgts', authMiddleware, async (req, res) => {
     if (!meses || !ano || !Array.isArray(meses)) {
       return res.status(400).json({ error: 'Ano e um array de meses são obrigatórios' });
     }
-    const intervalos = meses.map(mes => `data BETWEEN '${ano}-${mes}-01' AND '${ano}-${mes}-${getUltimoDiaMes(ano, mes)}'`).join(' OR ');
-    const query = `SELECT valor_cal, i_eventos FROM bethadba.fomovtoserv WHERE codi_emp = ? AND (${intervalos}) AND i_eventos = 996`;
+
     const odbcConnection = await connectToOdbc();
-    const result = await odbcConnection.query(query, [req.user.codi_emp]);
-    const { filtrados, somaExcluida, excluidos } = filtrarResultados(result);
-    const total = filtrados.reduce((acc, row) => acc + row.vcon_ent, 0);
-    res.json({ total, somaExcluida, cfopsExcluidos: excluidos.map(row => row.codi_nat) });
+    
+    const intervalos = meses.map(mes => {
+      const primeiroDia = `${ano}-${mes.toString().padStart(2, '0')}-01`;
+      const ultimoDia = `${ano}-${mes.toString().padStart(2, '0')}-${getUltimoDiaMes(ano, mes)}`;
+      return `(data BETWEEN '${primeiroDia}' AND '${ultimoDia}')`;
+    }).join(' OR ');
+
+    const query = `
+      SELECT COALESCE(SUM(valor_cal), 0) AS total 
+      FROM bethadba.fomovtoserv
+      WHERE codi_emp = ? AND (${intervalos}) AND i_eventos = 996 AND tipo_proces = 11 AND rateio = 0
+    `;
+
+    const [result] = await odbcConnection.query(query, [req.user.codi_emp]);
+    
+    res.json({ total: result.total });
   } catch (error) {
-    res.status(500).json({ error: 'Erro ao calcular a soma', details: error.message });
+    console.error("Erro ao calcular o INSS:", error);
+    res.status(500).json({ error: "Erro ao calcular o INSS", details: error.message });
   }
 });
 
