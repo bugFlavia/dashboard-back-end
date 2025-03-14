@@ -21,10 +21,11 @@ const User = sequelize.define('User', {
   },
   cnpj: {
     type: DataTypes.STRING,
-    allowNull: false
+    allowNull: false,
+    unique: true  // Garantir que o CNPJ seja único
   },
   codi_emp: {
-    type: DataTypes.STRING,
+    type: DataTypes.JSON,
     allowNull: false
   },
   celular: {
@@ -33,20 +34,11 @@ const User = sequelize.define('User', {
   },
   email: {
     type: DataTypes.STRING,
-    allowNull: false,
-    unique: true
+    allowNull: false
   },
   senha: {
     type: DataTypes.STRING,
     allowNull: false
-  },
-  matriz_id: {
-    type: DataTypes.INTEGER,
-    allowNull: true,  // Pode ser null para matrizes
-    references: {
-      model: 'User',
-      key: 'id',
-    },
   }
 }, {
   tableName: 'users',
