@@ -53,16 +53,28 @@ app.post('/login', async (req, res) => {
   try {
     const { email, senha } = req.body;
     const user = await User.findOne({ where: { email, senha } });
+
     if (!user) {
       return res.status(401).json({ error: 'Credenciais inválidas' });
     }
-    const token = jwt.sign({ id: user.id, email: user.email, codi_emp: user.codi_emp }, SECRET_KEY, { expiresIn: '1h' });
+
+    const token = jwt.sign(
+      {
+        id: user.id,
+        email: user.email,
+        codi_emp: user.codi_emp, // Envia o array de códigos
+      },
+      SECRET_KEY,
+      { expiresIn: '1h' }
+    );
+
     res.cookie('token', token, { httpOnly: true, secure: process.env.NODE_ENV === 'production' });
     res.json({ message: 'Login bem-sucedido' });
   } catch (error) {
     res.status(500).json({ error: 'Erro ao fazer login', details: error.message });
   }
 });
+
 
 // Rota para listar todos os usuários
 app.get('/users', authMiddleware, async (req, res) => {
@@ -74,91 +86,205 @@ app.get('/users', authMiddleware, async (req, res) => {
   }
 });
 
+app.post('/user', async (req, res) => {
+  try {
+    const { nome, nome_empresa, cpf, cnpj, codi_emp, celular, email, senha} = req.body;
+    const user = await User.create({ nome, nome_empresa, cpf, cnpj, codi_emp, celular, email, senha});
+    res.status(201).json(user);
+  } catch (error) {
+    console.error("Erro ao criar usuário:", error); // Exibe erro detalhado no console
+    res.status(500).json({ error: 'Erro ao criar usuário', details: error.message });
+  }
+});
+
 // Rota somaEntradas
 app.post('/somaEntradas', authMiddleware, async (req, res) => {
   try {
     const { meses, ano } = req.body;
+
     if (!meses || !ano || !Array.isArray(meses)) {
-      return res.status(400).json({ error: 'Ano e um array de meses são obrigatórios' });
+      return res.status(400).json({ error: 'Ano e um array de meses são obrigatórios.' });
     }
-    const intervalos = meses.map(mes => `DATA_ENTRADA BETWEEN '${ano}-${mes}-01' AND '${ano}-${mes}-${getUltimoDiaMes(ano, mes)}'`).join(' OR ');
-    const query = `SELECT vcon_ent, codi_nat FROM bethadba.efentradas WHERE codi_emp = ? AND (${intervalos})`;
+
+    const intervalos = meses
+      .map(mes => `DATA_ENTRADA BETWEEN '${ano}-${mes}-01' AND '${ano}-${mes}-${getUltimoDiaMes(ano, mes)}'`)
+      .join(' OR ');
+
     const odbcConnection = await connectToOdbc();
-    const result = await odbcConnection.query(query, [req.user.codi_emp]);
-    const { filtrados, somaExcluida, excluidos } = filtrarResultados(result);
-    const total = filtrados.reduce((acc, row) => acc + row.vcon_ent, 0);
-    res.json({ total, somaExcluida, cfopsExcluidos: excluidos.map(row => row.codi_nat) });
+
+    let totalSemExcluidos = 0;
+    let totalComExcluidos = 0;
+    const cfopsExcluidosGeral = [];
+
+    // Loop para processar todos os códigos de empresa
+    for (const codiEmp of req.user.codi_emp) {
+      const query = `
+        SELECT vcon_ent, codi_nat
+        FROM bethadba.efentradas
+        WHERE codi_emp = ? AND (${intervalos})
+      `;
+
+      const resultados = await odbcConnection.query(query, [codiEmp]);
+      const { filtrados, somaExcluida, excluidos } = filtrarResultados(resultados);
+
+      totalSemExcluidos += filtrados.reduce((acc, row) => acc + (row.vcon_ent || 0), 0);
+      totalComExcluidos += somaExcluida;
+      cfopsExcluidosGeral.push(...excluidos.map(row => row.codi_nat));
+    }
+
+    res.json({
+      totalSemExcluidos,
+      totalComExcluidos: totalSemExcluidos + totalComExcluidos,
+      cfopsExcluidos: cfopsExcluidosGeral
+    });
   } catch (error) {
-    res.status(500).json({ error: 'Erro ao calcular a soma', details: error.message });
+    res.status(500).json({ error: 'Erro ao calcular a soma de entradas', details: error.message });
   }
 });
 
-// Rota somaSaidas
 app.post('/somaSaidas', authMiddleware, async (req, res) => {
   try {
     const { meses, ano } = req.body;
+
     if (!meses || !ano || !Array.isArray(meses)) {
-      return res.status(400).json({ error: 'Ano e um array de meses são obrigatórios' });
+      return res.status(400).json({ error: 'Ano e um array de meses são obrigatórios.' });
     }
-    const intervalos = meses.map(mes => `DATA_SAIDA BETWEEN '${ano}-${mes}-01' AND '${ano}-${mes}-${getUltimoDiaMes(ano, mes)}'`).join(' OR ');
-    const query = `SELECT vcon_sai, codi_nat FROM bethadba.efsaidas WHERE codi_emp = ? AND (${intervalos})`;
+
+    const intervalos = meses
+      .map(mes => `DATA_SAIDA BETWEEN '${ano}-${mes}-01' AND '${ano}-${mes}-${getUltimoDiaMes(ano, mes)}'`)
+      .join(' OR ');
+
     const odbcConnection = await connectToOdbc();
-    const result = await odbcConnection.query(query, [req.user.codi_emp]);
-    const { filtrados, somaExcluida, excluidos } = filtrarResultados(result);
-    const total = filtrados.reduce((acc, row) => acc + row.vcon_sai, 0);
-    res.json({ total, somaExcluida, cfopsExcluidos: excluidos.map(row => row.codi_nat) });
+
+    let totalSemExcluidos = 0;
+    let totalComExcluidos = 0;
+    const cfopsExcluidosGeral = [];
+
+    // Loop para processar todos os códigos de empresa
+    for (const codiEmp of req.user.codi_emp) {
+      const query = `
+        SELECT vcon_sai, codi_nat
+        FROM bethadba.efsaidas
+        WHERE codi_emp = ? AND (${intervalos})
+      `;
+
+      const resultados = await odbcConnection.query(query, [codiEmp]);
+      const { filtrados, somaExcluida, excluidos } = filtrarResultados(resultados);
+
+      totalSemExcluidos += filtrados.reduce((acc, row) => acc + (row.vcon_sai || 0), 0);
+      totalComExcluidos += somaExcluida;
+      cfopsExcluidosGeral.push(...excluidos.map(row => row.codi_nat));
+    }
+
+    res.json({
+      totalSemExcluidos,
+      totalComExcluidos: totalSemExcluidos + totalComExcluidos,
+      cfopsExcluidos: cfopsExcluidosGeral
+    });
   } catch (error) {
-    res.status(500).json({ error: 'Erro ao calcular a soma', details: error.message });
+    res.status(500).json({ error: 'Erro ao calcular a soma de saídas', details: error.message });
   }
 });
+
 
 app.post('/icms', authMiddleware, async (req, res) => {
   try {
     const { meses, ano } = req.body;
+
     if (!meses || !ano || !Array.isArray(meses)) {
       return res.status(400).json({ error: 'Ano e um array de meses são obrigatórios' });
     }
-    const intervalos = meses.map(mes => `data_sim BETWEEN '${ano}-${mes}-01' AND '${ano}-${mes}-${getUltimoDiaMes(ano, mes)}'`).join(' OR ');
-    const query = `SELECT COALESCE(SUM(sdev_sim), 0) AS total FROM bethadba.efsdoimp WHERE codi_emp = ? AND (${intervalos}) AND codi_imp = 1`;
+
+    const intervalos = meses
+      .map(mes => `data_sim BETWEEN '${ano}-${mes}-01' AND '${ano}-${mes}-${getUltimoDiaMes(ano, mes)}'`)
+      .join(' OR ');
+
     const odbcConnection = await connectToOdbc();
-    const [result] = await odbcConnection.query(query, [req.user.codi_emp]);
-    res.json({ total: result.total });
+
+    const resultadosPorEmpresa = {};
+
+    for (const codiEmp of req.user.codi_emp) {
+      const query = `SELECT COALESCE(SUM(sdev_sim), 0) AS total FROM bethadba.efsdoimp WHERE codi_emp = ? AND (${intervalos}) AND codi_imp = 1`;
+
+      const [result] = await odbcConnection.query(query, [codiEmp]);
+
+      resultadosPorEmpresa[codiEmp] = result.total; // Salva o total por empresa
+    }
+
+    res.json(resultadosPorEmpresa);
   } catch (error) {
-    res.status(500).json({ error: 'Erro ao calcular a soma', details: error.message });
+    res.status(500).json({ error: 'Erro ao calcular o ICMS', details: error.message });
   }
 });
+
 
 app.post('/pis', authMiddleware, async (req, res) => {
   try {
     const { meses, ano } = req.body;
+
     if (!meses || !ano || !Array.isArray(meses)) {
-      return res.status(400).json({ error: 'Ano e um array de meses são obrigatórios' });
+      return res.status(400).json({ error: 'Ano e um array de meses são obrigatórios.' });
     }
-    const intervalos = meses.map(mes => `data_sim BETWEEN '${ano}-${mes}-01' AND '${ano}-${mes}-${getUltimoDiaMes(ano, mes)}'`).join(' OR ');
-    const query = `SELECT COALESCE(SUM(sdev_sim), 0) AS total FROM bethadba.efsdoimp WHERE codi_emp = ? AND (${intervalos}) AND codi_imp = 17`;
+
     const odbcConnection = await connectToOdbc();
-    const [result] = await odbcConnection.query(query, [req.user.codi_emp]);
-    res.json({ total: result.total });
+    let totalGeral = 0;
+
+    for (const codiEmp of req.user.codi_emp) {
+      const intervalos = meses
+        .map(mes => `data_sim BETWEEN '${ano}-${mes}-01' AND '${ano}-${mes}-${getUltimoDiaMes(ano, mes)}'`)
+        .join(' OR ');
+
+      const query = `
+        SELECT COALESCE(SUM(sdev_sim), 0) AS total
+        FROM bethadba.efsdoimp
+        WHERE codi_emp = ? AND (${intervalos}) AND codi_imp = 17
+      `;
+
+      const [result] = await odbcConnection.query(query, [codiEmp]);
+      totalGeral += result.total || 0;
+    }
+
+    res.json({ total: totalGeral });
   } catch (error) {
-    res.status(500).json({ error: 'Erro ao calcular a soma', details: error.message });
+    console.error("Erro ao calcular o PIS:", error);
+    res.status(500).json({ error: "Erro ao calcular o PIS", details: error.message });
   }
 });
+
 
 app.post('/cofins', authMiddleware, async (req, res) => {
   try {
     const { meses, ano } = req.body;
+
     if (!meses || !ano || !Array.isArray(meses)) {
-      return res.status(400).json({ error: 'Ano e um array de meses são obrigatórios' });
+      return res.status(400).json({ error: 'Ano e um array de meses são obrigatórios.' });
     }
-    const intervalos = meses.map(mes => `data_sim BETWEEN '${ano}-${mes}-01' AND '${ano}-${mes}-${getUltimoDiaMes(ano, mes)}'`).join(' OR ');
-    const query = `SELECT COALESCE(SUM(sdev_sim), 0) AS total FROM bethadba.efsdoimp WHERE codi_emp = ? AND (${intervalos}) AND codi_imp = 19`;
+
     const odbcConnection = await connectToOdbc();
-    const [result] = await odbcConnection.query(query, [req.user.codi_emp]);
-    res.json({ total: result.total });
+    let totalGeral = 0;
+
+    for (const codiEmp of req.user.codi_emp) {
+      const intervalos = meses
+        .map(mes => `data_sim BETWEEN '${ano}-${mes}-01' AND '${ano}-${mes}-${getUltimoDiaMes(ano, mes)}'`)
+        .join(' OR ');
+
+      const query = `
+        SELECT COALESCE(SUM(sdev_sim), 0) AS total
+        FROM bethadba.efsdoimp
+        WHERE codi_emp = ? AND (${intervalos}) AND codi_imp = 19
+      `;
+
+      const [result] = await odbcConnection.query(query, [codiEmp]);
+      totalGeral += result.total || 0;
+    }
+
+    res.json({ total: totalGeral });
   } catch (error) {
-    res.status(500).json({ error: 'Erro ao calcular a soma', details: error.message });
+    console.error("Erro ao calcular a COFINS:", error);
+    res.status(500).json({ error: "Erro ao calcular a COFINS", details: error.message });
   }
 });
+
 
 app.post('/valorFolha', authMiddleware, async (req, res) => {
   try {
@@ -169,34 +295,37 @@ app.post('/valorFolha', authMiddleware, async (req, res) => {
     }
 
     const odbcConnection = await connectToOdbc();
+
     let totalProventos = 0;
     let totalDescontos = 0;
 
-    for (const mes of meses) {
-      const primeiroDia = `${ano}-${mes.toString().padStart(2, '0')}-01`;
-      const ultimoDia = `${ano}-${mes.toString().padStart(2, '0')}-${getUltimoDiaMes(ano, mes)}`;
+    for (const codiEmp of req.user.codi_emp) {
+      for (const mes of meses) {
+        const primeiroDia = `${ano}-${mes.toString().padStart(2, '0')}-01`;
+        const ultimoDia = `${ano}-${mes.toString().padStart(2, '0')}-${getUltimoDiaMes(ano, mes)}`;
 
-      const query = `
-        SELECT VALOR_CAL, PROV_DESC
-        FROM bethadba.fomovtoserv
-        WHERE codi_emp = ?
-          AND DATA BETWEEN ? AND ?
-          AND RATEIO = 0
-          AND TIPO_PROCES = 11
-          AND I_EVENTOS NOT IN (9176, 9177, 9178)
-      `;
+        const query = `
+          SELECT VALOR_CAL, PROV_DESC
+          FROM bethadba.fomovtoserv
+          WHERE codi_emp = ?
+            AND DATA BETWEEN ? AND ?
+            AND RATEIO = 0
+            AND TIPO_PROCES = 11
+            AND I_EVENTOS NOT IN (9176, 9177, 9178)
+        `;
 
-      const resultados = await odbcConnection.query(query, [req.user.codi_emp, primeiroDia, ultimoDia]);
+        const resultados = await odbcConnection.query(query, [codiEmp, primeiroDia, ultimoDia]);
 
-      resultados.forEach(({ VALOR_CAL, PROV_DESC }) => {
-        const valor = parseFloat(VALOR_CAL) || 0;
+        resultados.forEach(({ VALOR_CAL, PROV_DESC }) => {
+          const valor = parseFloat(VALOR_CAL) || 0;
 
-        if (PROV_DESC === 'P') {
-          totalProventos += valor;
-        } else if (PROV_DESC === 'D') {
-          totalDescontos += valor;
-        }
-      });
+          if (PROV_DESC === 'P') {
+            totalProventos += valor;
+          } else if (PROV_DESC === 'D') {
+            totalDescontos += valor;
+          }
+        });
+      }
     }
 
     const totalGeral = totalProventos - totalDescontos;
@@ -207,7 +336,6 @@ app.post('/valorFolha', authMiddleware, async (req, res) => {
       totalGeral: parseFloat(totalGeral.toFixed(2)),
     });
   } catch (error) {
-    console.error('Erro ao processar múltiplos meses em valorFolha:', error);
     res.status(500).json({ error: 'Erro ao processar múltiplos meses.', detalhes: error.message });
   }
 });
@@ -216,94 +344,116 @@ app.post('/valorFolha', authMiddleware, async (req, res) => {
 app.post('/irrf', authMiddleware, async (req, res) => {
   try {
     const { meses, ano } = req.body;
+
     if (!meses || !ano || !Array.isArray(meses)) {
-      return res.status(400).json({ error: 'Ano e um array de meses são obrigatórios' });
+      return res.status(400).json({ error: 'Ano e um array de meses são obrigatórios.' });
     }
 
     const odbcConnection = await connectToOdbc();
-    
-    // Construção dos intervalos de datas para cada mês fornecido
-    const intervalos = meses.map(mes => {
-      const primeiroDia = `${ano}-${mes.toString().padStart(2, '0')}-01`;
-      const ultimoDia = `${ano}-${mes.toString().padStart(2, '0')}-${getUltimoDiaMes(ano, mes)}`;
-      return `(periodo_inicio >= '${primeiroDia}' AND periodo_fim <= '${ultimoDia}')`;
-    }).join(' OR ');
+    let totalGeral = 0;
 
-    const query = `
-      SELECT COALESCE(SUM(valor), 0) AS total 
-      FROM bethadba.focalcirrf 
-      WHERE codi_emp = ? AND (${intervalos})
-    `;
+    for (const codiEmp of req.user.codi_emp) {
+      const intervalos = meses
+        .map(mes => {
+          const primeiroDia = `${ano}-${mes.toString().padStart(2, '0')}-01`;
+          const ultimoDia = `${ano}-${mes.toString().padStart(2, '0')}-${getUltimoDiaMes(ano, mes)}`;
+          return `(periodo_inicio >= '${primeiroDia}' AND periodo_fim <= '${ultimoDia}')`;
+        })
+        .join(' OR ');
 
-    const [result] = await odbcConnection.query(query, [req.user.codi_emp]);
-    
-    res.json({ total: result.total });
+      const query = `
+        SELECT COALESCE(SUM(valor), 0) AS total
+        FROM bethadba.focalcirrf
+        WHERE codi_emp = ? AND (${intervalos})
+      `;
+
+      const [result] = await odbcConnection.query(query, [codiEmp]);
+      totalGeral += result.total || 0;
+    }
+
+    res.json({ total: totalGeral });
   } catch (error) {
     console.error("Erro ao calcular o IRRF:", error);
     res.status(500).json({ error: "Erro ao calcular o IRRF", details: error.message });
   }
 });
 
+
 app.post('/inss', authMiddleware, async (req, res) => {
   try {
     const { meses, ano } = req.body;
+
     if (!meses || !ano || !Array.isArray(meses)) {
-      return res.status(400).json({ error: 'Ano e um array de meses são obrigatórios' });
+      return res.status(400).json({ error: 'Ano e um array de meses são obrigatórios.' });
     }
 
     const odbcConnection = await connectToOdbc();
-    
-    // Construção dos intervalos de datas para cada mês fornecido
-    const intervalos = meses.map(mes => {
-      const primeiroDia = `${ano}-${mes.toString().padStart(2, '0')}-01`;
-      const ultimoDia = `${ano}-${mes.toString().padStart(2, '0')}-${getUltimoDiaMes(ano, mes)}`;
-      return `(competencia BETWEEN '${primeiroDia}' AND '${ultimoDia}')`;
-    }).join(' OR ');
+    let totalGeral = 0;
 
-    const query = `
-      SELECT COALESCE(SUM(total_guia), 0) AS total 
-      FROM bethadba.foguiainss 
-      WHERE codi_emp = ? AND (${intervalos})
-    `;
+    for (const codiEmp of req.user.codi_emp) {
+      const intervalos = meses
+        .map(mes => {
+          const primeiroDia = `${ano}-${mes.toString().padStart(2, '0')}-01`;
+          const ultimoDia = `${ano}-${mes.toString().padStart(2, '0')}-${getUltimoDiaMes(ano, mes)}`;
+          return `(competencia BETWEEN '${primeiroDia}' AND '${ultimoDia}')`;
+        })
+        .join(' OR ');
 
-    const [result] = await odbcConnection.query(query, [req.user.codi_emp]);
-    
-    res.json({ total: result.total });
+      const query = `
+        SELECT COALESCE(SUM(total_guia), 0) AS total
+        FROM bethadba.foguiainss
+        WHERE codi_emp = ? AND (${intervalos})
+      `;
+
+      const [result] = await odbcConnection.query(query, [codiEmp]);
+      totalGeral += result.total || 0;
+    }
+
+    res.json({ total: totalGeral });
   } catch (error) {
     console.error("Erro ao calcular o INSS:", error);
     res.status(500).json({ error: "Erro ao calcular o INSS", details: error.message });
   }
 });
+
 
 app.post('/fgts', authMiddleware, async (req, res) => {
   try {
     const { meses, ano } = req.body;
+
     if (!meses || !ano || !Array.isArray(meses)) {
-      return res.status(400).json({ error: 'Ano e um array de meses são obrigatórios' });
+      return res.status(400).json({ error: 'Ano e um array de meses são obrigatórios.' });
     }
 
     const odbcConnection = await connectToOdbc();
-    
-    const intervalos = meses.map(mes => {
-      const primeiroDia = `${ano}-${mes.toString().padStart(2, '0')}-01`;
-      const ultimoDia = `${ano}-${mes.toString().padStart(2, '0')}-${getUltimoDiaMes(ano, mes)}`;
-      return `(data BETWEEN '${primeiroDia}' AND '${ultimoDia}')`;
-    }).join(' OR ');
+    let totalGeral = 0;
 
-    const query = `
-      SELECT COALESCE(SUM(valor_cal), 0) AS total 
-      FROM bethadba.fomovtoserv
-      WHERE codi_emp = ? AND (${intervalos}) AND i_eventos = 996 AND tipo_proces = 11 AND rateio = 0
-    `;
+    for (const codiEmp of req.user.codi_emp) {
+      const intervalos = meses
+        .map(mes => {
+          const primeiroDia = `${ano}-${mes.toString().padStart(2, '0')}-01`;
+          const ultimoDia = `${ano}-${mes.toString().padStart(2, '0')}-${getUltimoDiaMes(ano, mes)}`;
+          return `(data BETWEEN '${primeiroDia}' AND '${ultimoDia}')`;
+        })
+        .join(' OR ');
 
-    const [result] = await odbcConnection.query(query, [req.user.codi_emp]);
-    
-    res.json({ total: result.total });
+      const query = `
+        SELECT COALESCE(SUM(valor_cal), 0) AS total
+        FROM bethadba.fomovtoserv
+        WHERE codi_emp = ? AND (${intervalos}) AND i_eventos = 996 AND tipo_proces = 11 AND rateio = 0
+      `;
+
+      const [result] = await odbcConnection.query(query, [codiEmp]);
+      totalGeral += result.total || 0;
+    }
+
+    res.json({ total: totalGeral });
   } catch (error) {
-    console.error("Erro ao calcular o INSS:", error);
-    res.status(500).json({ error: "Erro ao calcular o INSS", details: error.message });
+    console.error("Erro ao calcular o FGTS:", error);
+    res.status(500).json({ error: "Erro ao calcular o FGTS", details: error.message });
   }
 });
+
 
 // Inicializando o servidor
 if (require.main === module) {
