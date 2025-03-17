@@ -97,6 +97,64 @@ app.post('/user', async (req, res) => {
   }
 });
 
+app.put('/user/:id', async (req, res) => {
+  try {
+    const id = req.params.id; // Mantendo o req.params.id, mas corrigindo a sintaxe
+    const dadosAtualizados = req.body;
+
+    // Impede alterações no campo `id`
+    if (dadosAtualizados.id !== undefined) {
+      return res.status(400).json({ error: 'O campo "id" não pode ser alterado.' });
+    }
+
+    // Busca o usuário no banco de dados
+    const user = await User.findByPk(id);
+
+    if (!user) {
+      return res.status(404).json({ error: 'Usuário não encontrado' });
+    }
+
+    // Atualiza apenas os campos fornecidos no corpo da requisição
+    Object.keys(dadosAtualizados).forEach((campo) => {
+      if (user[campo] !== undefined) {
+        user[campo] = dadosAtualizados[campo];
+      }
+    });
+
+    await user.save(); // Salva as alterações no banco de dados
+
+    // Retorna apenas os campos atualizados para o cliente
+    const respostaAtualizada = Object.keys(dadosAtualizados).reduce((acc, campo) => {
+      acc[campo] = user[campo];
+      return acc;
+    }, {});
+
+    res.json(respostaAtualizada); // Envia apenas os campos atualizados
+  } catch (error) {
+    console.error("Erro ao atualizar usuário:", error);
+    res.status(500).json({ error: 'Erro ao atualizar usuário', details: error.message });
+  }
+});
+
+
+
+app.delete('/user/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const user = await User.findByPk(id);
+
+    if (!user) {
+      return res.status(404).json({ error: 'Usuário não encontrado' });
+    }
+
+    await user.destroy();
+    res.json({ message: 'Usuário excluído com sucesso' });
+  } catch (error) {
+    console.error("Erro ao excluir usuário:", error);
+    res.status(500).json({ error: 'Erro ao excluir usuário', details: error.message });
+  }
+});
+
 // Rota somaEntradas
 app.post('/somaEntradas', authMiddleware, async (req, res) => {
   try {
