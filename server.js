@@ -512,6 +512,81 @@ app.post('/fgts', authMiddleware, async (req, res) => {
   }
 });
 
+app.post('/demitidos', authMiddleware, async (req, res) => {
+  try {
+    const { meses, ano } = req.body;
+
+    if (!meses || !ano || !Array.isArray(meses)) {
+      return res.status(400).json({ error: 'Ano e um array de meses são obrigatórios.' });
+    }
+
+    const odbcConnection = await connectToOdbc();
+    let totalGeral = 0;
+
+    for (const codiEmp of req.user.codi_emp) { // Certificando-se de que CODI_EMP é filtrado pelo login do usuário
+      const intervalos = meses
+        .map(mes => {
+          const primeiroDia = `${ano}-${mes.toString().padStart(2, '0')}-01`;
+          const ultimoDia = `${ano}-${mes.toString().padStart(2, '0')}-${getUltimoDiaMes(ano, mes)}`;
+          return `(DATA_REAL BETWEEN '${primeiroDia}' AND '${ultimoDia}')`;
+        })
+        .join(' OR ');
+
+      // Alteração na consulta para considerar I_AFASTAMENTOS = 8
+      const query = `
+        SELECT COUNT(*) AS total
+        FROM bethadba.FOSITUACOES
+        WHERE CODI_EMP = ? AND (${intervalos}) AND NOVA_SITUACAO = 8
+      `;
+
+      const [result] = await odbcConnection.query(query, [codiEmp]);
+      totalGeral += result.total || 0; // Incrementando o total para todos os codi_emp associados ao usuário
+    }
+
+    res.json({ total: totalGeral });
+  } catch (error) {
+    console.error("Erro ao calcular o número de demitidos:", error);
+    res.status(500).json({ error: "Erro ao calcular o número de demitidos", details: error.message });
+  }
+});
+
+app.post('/admitidos', authMiddleware, async (req, res) => {
+  try {
+    const { meses, ano } = req.body;
+
+    if (!meses || !ano || !Array.isArray(meses)) {
+      return res.status(400).json({ error: 'Ano e um array de meses são obrigatórios.' });
+    }
+
+    const odbcConnection = await connectToOdbc();
+    let totalGeral = 0;
+
+    for (const codiEmp of req.user.codi_emp) { // Certificando-se de que CODI_EMP é filtrado pelo login do usuário
+      const intervalos = meses
+        .map(mes => {
+          const primeiroDia = `${ano}-${mes.toString().padStart(2, '0')}-01`;
+          const ultimoDia = `${ano}-${mes.toString().padStart(2, '0')}-${getUltimoDiaMes(ano, mes)}`;
+          return `(data_base BETWEEN '${primeiroDia}' AND '${ultimoDia}')`;
+        })
+        .join(' OR ');
+
+      // Alteração na consulta para considerar I_AFASTAMENTOS = 8
+      const query = `
+        SELECT COUNT(*) AS total
+        FROM bethadba.foempregados
+        WHERE codi_emp = ? AND (${intervalos}) AND I_AFASTAMENTOS = 1
+      `;
+
+      const [result] = await odbcConnection.query(query, [codiEmp]);
+      totalGeral += result.total || 0; // Incrementando o total para todos os codi_emp associados ao usuário
+    }
+
+    res.json({ total: totalGeral });
+  } catch (error) {
+    console.error("Erro ao calcular o número de demitidos:", error);
+    res.status(500).json({ error: "Erro ao calcular o número de demitidos", details: error.message });
+  }
+});
 
 // Inicializando o servidor
 if (require.main === module) {
