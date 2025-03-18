@@ -653,6 +653,7 @@ app.post('/funcionarios', authMiddleware, async (req, res) => {
   }
 });
 
+
 app.post('/ferias', authMiddleware, async (req, res) => {
   try {
     const { meses, ano } = req.body;
