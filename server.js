@@ -590,66 +590,59 @@ app.post('/admitidos', authMiddleware, async (req, res) => {
 
 app.post('/funcionarios', authMiddleware, async (req, res) => {
   try {
-    const { ano, meses } = req.body;
+    const { meses, ano } = req.body;
 
-    if (!ano || !meses || !Array.isArray(meses)) {
-      return res.status(400).json({ error: 'Ano e um array de meses são obrigatórios no JSON.' });
+    if (!meses || !ano || !Array.isArray(meses)) {
+      return res.status(400).json({ error: 'Ano e um array de meses são obrigatórios.' });
     }
 
-    const odbcConnection = await connectToOdbc();
-    let totalAfastamentosIgual1 = 0;
-    let totalAfastamentosAdicionais = 0;
+    const primeiroDia = `${ano}-${meses[0].toString().padStart(2, '0')}-01`;
+    const ultimoDia = `${ano}-${meses[meses.length - 1].toString().padStart(2, '0')}-${getUltimoDiaMes(ano, meses[meses.length - 1])}`;
 
-    // Gerar os intervalos de datas com base no ano e meses fornecidos
-    const intervalos = meses.map(mes => {
-      const primeiroDia = `${ano}-${mes.toString().padStart(2, '0')}-01`;
-      const ultimoDia = `${ano}-${mes.toString().padStart(2, '0')}-${getUltimoDiaMes(ano, mes)}`;
-      return { primeiroDia, ultimoDia };
-    });
+    const odbcConnection = await connectToOdbc();
+    let totalEmpregadosAtivos = 0;
+    let listaEmpregados = [];
 
     for (const codiEmp of req.user.codi_emp) {
-      // Contar funcionários com I_AFASTAMENTOS = 1, admissão menor que a data inserida
-      for (const { primeiroDia, ultimoDia } of intervalos) {
-        const queryAfastamentos1 = `
-          SELECT COUNT(*) AS total
-          FROM bethadba.foempregados
-          WHERE codi_emp = ? AND admissao < ? AND I_AFASTAMENTOS = 1
-        `;
-        const [resultAfastamentos1] = await odbcConnection.query(queryAfastamentos1, [codiEmp, ultimoDia]);
-        totalAfastamentosIgual1 += resultAfastamentos1.total || 0;
-      }
+      // Consulta na tabela foempregados com lógica condicional
+      const queryEmpregadosAtivos = `
+        SELECT i_empregados
+        FROM bethadba.foempregados
+        WHERE codi_emp = ?
+          AND admissao < ?
+          AND I_AFASTAMENTOS = 1
+          AND (
+            CATEGORIA_ESOCIAL IS NULL
+            OR CATEGORIA_ESOCIAL != 722
+          )
+      `;
+      const empregadosAtivos = await odbcConnection.query(queryEmpregadosAtivos, [codiEmp, ultimoDia]);
+      totalEmpregadosAtivos += empregadosAtivos.length;
+      listaEmpregados.push(...empregadosAtivos.map(e => e.i_empregados));
 
-      // Verificar funcionários com I_AFASTAMENTOS = 8 e admissão menor que a data inserida
-      for (const { primeiroDia, ultimoDia } of intervalos) {
-        const queryAfastamentos8 = `
-          SELECT i_empregados
-          FROM bethadba.foempregados
-          WHERE codi_emp = ? AND admissao < ? AND I_AFASTAMENTOS = 8
-        `;
-        const funcionariosComAfastamento8 = await odbcConnection.query(queryAfastamentos8, [codiEmp, ultimoDia]);
-
-        // Consultar na tabela FOSITUACOES se eles têm NOVA_SITUACAO = 8 e DATA_REAL no período
-        for (const funcionario of funcionariosComAfastamento8) {
-          const querySituacoes = `
-            SELECT COUNT(*) AS total
-            FROM bethadba.FOSITUACOES
-            WHERE CODI_EMP = ? AND i_empregados = ? AND NOVA_SITUACAO = 8 AND DATA_REAL BETWEEN ? AND ?
-          `;
-          const [resultSituacoes] = await odbcConnection.query(querySituacoes, [codiEmp, funcionario.i_empregados, primeiroDia, ultimoDia]);
-
-          totalAfastamentosAdicionais += resultSituacoes.total || 0;
-        }
-      }
+      // Consulta na tabela FOSITUACOES
+      const querySituacoes = `
+        SELECT i_empregados
+        FROM bethadba.FOSITUACOES
+        WHERE CODI_EMP = ?
+          AND NOVA_SITUACAO = 8
+          AND DATA_REAL >= ?
+      `;
+      const situacoes = await odbcConnection.query(querySituacoes, [codiEmp, primeiroDia]);
+      totalEmpregadosAtivos += situacoes.length;
+      listaEmpregados.push(...situacoes.map(s => s.i_empregados));
     }
 
     res.json({
-      totalAfastamentosIgual1,
-      totalAfastamentosAdicionais,
-      totalGeral: totalAfastamentosIgual1 + totalAfastamentosAdicionais,
+      totalEmpregadosAtivos,
+      listaEmpregados,
+      detalhes: {
+        quantidadeIEmpregados: listaEmpregados.length,
+      },
     });
   } catch (error) {
-    console.error("Erro ao processar a rota '/funcionarios':", error);
-    res.status(500).json({ error: 'Erro ao calcular os funcionários.', detalhes: error.message });
+    console.error('Erro ao processar a rota /trabalhando:', error);
+    res.status(500).json({ error: 'Erro ao calcular os funcionários ativos.', detalhes: error.message });
   }
 });
 
