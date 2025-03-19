@@ -720,6 +720,42 @@ app.post('/afastados', authMiddleware, async (req, res) => {
   }
 });
 
+app.post('/aviso', authMiddleware, async (req, res) => {
+  try {
+    const { meses, ano } = req.body;
+
+    if (!meses || !ano || !Array.isArray(meses)) {
+      return res.status(400).json({ error: 'Ano e um array de meses são obrigatórios.' });
+    }
+
+    const odbcConnection = await connectToOdbc();
+    let totalGeral = 0;
+
+    for (const codiEmp of req.user.codi_emp) {
+      const intervalos = meses
+        .map(mes => {
+          const primeiroDia = `${ano}-${mes.toString().padStart(2, '0')}-01`;
+          const ultimoDia = `${ano}-${mes.toString().padStart(2, '0')}-${getUltimoDiaMes(ano, mes)}`;
+          return `(COMPETENCIA BETWEEN '${primeiroDia}' AND '${ultimoDia}')`;
+        })
+        .join(' OR ');
+
+      const query = `
+        SELECT COUNT(DISTINCT i_empregados) AS total
+        FROM bethadba.forescisoes
+        WHERE codi_emp = ? AND (${intervalos}) AND I_AFASTAMENTOS != 8 AND I_AFASTAMENTOS != 9 AND I_AFASTAMENTOS != 1`
+
+      const [result] = await odbcConnection.query(query, [codiEmp]);
+      totalGeral += result.total || 0;
+    }
+
+    res.json({ total: totalGeral });
+  } catch (error) {
+    console.error("Erro ao calcular o número de funcionários de férias:", error);
+    res.status(500).json({ error: "Erro ao calcular o número de funcionários de férias", details: error.message });
+  }
+});
+
 // Inicializando o servidor
 if (require.main === module) {
   app.listen(port, () => {
