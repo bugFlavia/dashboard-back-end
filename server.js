@@ -720,7 +720,7 @@ app.post('/afastados', authMiddleware, async (req, res) => {
   }
 });
 
-app.post('/aviso', authMiddleware, async (req, res) => {
+app.post('/avisos', authMiddleware, async (req, res) => {
   try {
     const { meses, ano } = req.body;
 
@@ -743,8 +743,7 @@ app.post('/aviso', authMiddleware, async (req, res) => {
       const query = `
         SELECT COUNT(DISTINCT i_empregados) AS total
         FROM bethadba.forescisoes
-        WHERE codi_emp = ? AND (${intervalos}) AND I_AFASTAMENTOS != 8 AND I_AFASTAMENTOS != 9 AND I_AFASTAMENTOS != 1`
-
+        WHERE codi_emp = ? AND (${intervalos}) AND aviso_previo = 2`
       const [result] = await odbcConnection.query(query, [codiEmp]);
       totalGeral += result.total || 0;
     }
