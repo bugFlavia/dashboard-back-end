@@ -48,6 +48,25 @@ function filtrarResultados(resultados) {
   return { filtrados: resultados.filter(row => !codiNatExcluidos.has(parseInt(row.codi_nat))), somaExcluida, excluidos };
 }
 
+async function filtrarRubricas() {
+  try {
+    const odbcConnection = await connectToOdbc(); // Certifique-se de que a conexão ODBC está configurada
+    const query = `
+      SELECT i_eventos
+      FROM bethadba.foeventos
+      WHERE LOWER(nome) LIKE '%horas extras%'
+    `;
+
+    const resultados = await odbcConnection.query(query);
+    const arrayFiltrado = resultados.map(row => row.i_eventos);
+    return arrayFiltrado;
+  } catch (error) {
+    console.error("Erro ao filtrar rubricas:", error);
+    throw error;
+  }
+}
+
+
 // Rota de login
 app.post('/login', async (req, res) => {
   try {
@@ -789,6 +808,53 @@ app.post('/experiencia', authMiddleware, async (req, res) => {
     res.status(500).json({ error: "Erro ao calcular o número de funcionários de férias", details: error.message });
   }
 });
+
+app.post('/horasExtras', authMiddleware, async (req, res) => {
+  try {
+    const { meses, ano } = req.body;
+
+    if (!meses || !ano || !Array.isArray(meses)) {
+      return res.status(400).json({ error: 'Ano e um array de meses são obrigatórios.' });
+    }
+
+    // Calcula o período inicial e final com base no array de meses
+    const primeiroDia = `${ano}-${meses[0].toString().padStart(2, '0')}-01`;
+    const ultimoDia = `${ano}-${meses[meses.length - 1].toString().padStart(2, '0')}-${getUltimoDiaMes(ano, meses[meses.length - 1])}`;
+
+    const odbcConnection = await connectToOdbc();
+
+    // Recupera os `i_eventos` filtrados pela função `filtrarRubricas`
+    const rubricas = await filtrarRubricas();
+    if (!rubricas || rubricas.length === 0) {
+      return res.status(404).json({ error: 'Nenhuma rubrica encontrada para "HORAS EXTRAS".' });
+    }
+
+    let somaValorCal = 0;
+
+    // Itera por cada código de empresa do usuário logado
+    for (const codiEmp of req.user.codi_emp) {
+      const query = `
+        SELECT SUM(valor_cal) AS total
+        FROM bethadba.fomovtoserv
+        WHERE codi_emp = ?
+          AND data BETWEEN ? AND ?
+          AND rateio = 0
+          AND tipo_proces = 11
+          AND i_eventos IN (${rubricas.join(',')})
+      `;
+
+      const [result] = await odbcConnection.query(query, [codiEmp, primeiroDia, ultimoDia]);
+
+      somaValorCal += result.total || 0;
+    }
+
+    res.json({ totalHorasExtras: parseFloat(somaValorCal.toFixed(2)) });
+  } catch (error) {
+    console.error("Erro ao processar a rota /horasExtras:", error);
+    res.status(500).json({ error: 'Erro ao calcular horas extras.', detalhes: error.message });
+  }
+});
+
 
 // Inicializando o servidor
 if (require.main === module) {
