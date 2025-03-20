@@ -665,7 +665,6 @@ app.post('/funcionarios', authMiddleware, async (req, res) => {
   }
 });
 
-
 app.post('/ferias', authMiddleware, async (req, res) => {
   try {
     const { meses, ano } = req.body;
@@ -676,6 +675,8 @@ app.post('/ferias', authMiddleware, async (req, res) => {
 
     const odbcConnection = await connectToOdbc();
     let totalGeral = 0;
+    let empregadosArray = [];
+    let nomesEmpregados = [];
 
     for (const codiEmp of req.user.codi_emp) {
       const intervalos = meses
@@ -687,19 +688,39 @@ app.post('/ferias', authMiddleware, async (req, res) => {
         .join(' OR ');
 
       const query = `
-        SELECT COUNT(DISTINCT I_EMPREGADOS) AS total
+        SELECT DISTINCT I_EMPREGADOS
         FROM bethadba.FOFERIAS
         WHERE CODI_EMP = ? AND (${intervalos})
       `;
 
-      const [result] = await odbcConnection.query(query, [codiEmp]);
-      totalGeral += result.total || 0;
+      const resultados = await odbcConnection.query(query, [codiEmp]);
+      totalGeral += resultados.length;
+      empregadosArray.push(...resultados.map(row => row.I_EMPREGADOS));
     }
 
-    res.json({ total: totalGeral });
+    for (const iEmpregado of empregadosArray) {
+      for (const codiEmp of req.user.codi_emp) { // Adicionando o filtro codi_emp
+        const queryNome = `
+          SELECT nome
+          FROM bethadba.foempregados
+          WHERE i_empregados = ? AND codi_emp = ?
+        `;
+
+        const [resultadoNome] = await odbcConnection.query(queryNome, [iEmpregado, codiEmp]);
+        if (resultadoNome) {
+          nomesEmpregados.push(resultadoNome.nome);
+          console.log(resultadoNome.nome); // Exibe o nome no console
+        }
+      }
+    }
+
+    res.json({
+      total: totalGeral,
+      empregados: nomesEmpregados,
+    });
   } catch (error) {
-    console.error("Erro ao calcular o número de funcionários de férias:", error);
-    res.status(500).json({ error: "Erro ao calcular o número de funcionários de férias", details: error.message });
+    console.error("Erro ao calcular férias:", error);
+    res.status(500).json({ error: "Erro ao processar os dados", details: error.message });
   }
 });
 
@@ -713,6 +734,8 @@ app.post('/afastados', authMiddleware, async (req, res) => {
 
     const odbcConnection = await connectToOdbc();
     let totalGeral = 0;
+    let empregadosArray = [];
+    let nomesEmpregados = [];
 
     for (const codiEmp of req.user.codi_emp) {
       const intervalos = meses
@@ -724,18 +747,39 @@ app.post('/afastados', authMiddleware, async (req, res) => {
         .join(' OR ');
 
       const query = `
-        SELECT COUNT(DISTINCT I_EMPREGADOS) AS total
+        SELECT DISTINCT I_EMPREGADOS
         FROM bethadba.FOAFASTAMENTOS_COMPETENCIA
-        WHERE CODI_EMP = ? AND (${intervalos}) AND I_AFASTAMENTOS != 8 AND I_AFASTAMENTOS != 9 AND I_AFASTAMENTOS != 1`
+        WHERE CODI_EMP = ? AND (${intervalos}) AND I_AFASTAMENTOS NOT IN (1, 8, 9)
+      `;
 
-      const [result] = await odbcConnection.query(query, [codiEmp]);
-      totalGeral += result.total || 0;
+      const resultados = await odbcConnection.query(query, [codiEmp]);
+      totalGeral += resultados.length;
+      empregadosArray.push(...resultados.map(row => row.I_EMPREGADOS));
     }
 
-    res.json({ total: totalGeral });
+    for (const iEmpregado of empregadosArray) {
+      for (const codiEmp of req.user.codi_emp) { // Adicionando o filtro de codi_emp
+        const queryNome = `
+          SELECT nome
+          FROM bethadba.foempregados
+          WHERE i_empregados = ? AND codi_emp = ?
+        `;
+
+        const [resultadoNome] = await odbcConnection.query(queryNome, [iEmpregado, codiEmp]);
+        if (resultadoNome) {
+          nomesEmpregados.push(resultadoNome.nome);
+          console.log(resultadoNome.nome); // Exibe o nome no console
+        }
+      }
+    }
+
+    res.json({
+      total: totalGeral,
+      empregados: nomesEmpregados,
+    });
   } catch (error) {
-    console.error("Erro ao calcular o número de funcionários de férias:", error);
-    res.status(500).json({ error: "Erro ao calcular o número de funcionários de férias", details: error.message });
+    console.error("Erro ao processar afastados:", error);
+    res.status(500).json({ error: "Erro ao calcular os dados de afastados", details: error.message });
   }
 });
 
@@ -749,28 +793,53 @@ app.post('/avisos', authMiddleware, async (req, res) => {
 
     const odbcConnection = await connectToOdbc();
     let totalGeral = 0;
+    let empregadosArray = [];
+    let nomesEmpregados = [];
 
     for (const codiEmp of req.user.codi_emp) {
       const intervalos = meses
         .map(mes => {
           const primeiroDia = `${ano}-${mes.toString().padStart(2, '0')}-01`;
           const ultimoDia = `${ano}-${mes.toString().padStart(2, '0')}-${getUltimoDiaMes(ano, mes)}`;
-          return `(COMPETENCIA BETWEEN '${primeiroDia}' AND '${ultimoDia}')`;
+          return `(data_aviso BETWEEN '${primeiroDia}' AND '${ultimoDia}')`;
         })
         .join(' OR ');
 
+      // Consulta com filtro de codi_emp
       const query = `
-        SELECT COUNT(DISTINCT i_empregados) AS total
+        SELECT DISTINCT i_empregados
         FROM bethadba.forescisoes
-        WHERE codi_emp = ? AND (${intervalos}) AND aviso_previo = 2`
-      const [result] = await odbcConnection.query(query, [codiEmp]);
-      totalGeral += result.total || 0;
+        WHERE codi_emp = ? AND (${intervalos}) AND aviso_previo = 2
+      `;
+
+      const resultados = await odbcConnection.query(query, [codiEmp]);
+      totalGeral += resultados.length;
+      empregadosArray.push(...resultados.map(row => row.i_empregados));
     }
 
-    res.json({ total: totalGeral });
+    for (const iEmpregado of empregadosArray) {
+      for (const codiEmp of req.user.codi_emp) { // Adicionando o filtro codi_emp
+        const queryNome = `
+          SELECT nome
+          FROM bethadba.foempregados
+          WHERE i_empregados = ? AND codi_emp = ?
+        `;
+
+        const [resultadoNome] = await odbcConnection.query(queryNome, [iEmpregado, codiEmp]);
+        if (resultadoNome) {
+          nomesEmpregados.push(resultadoNome.nome);
+          console.log(resultadoNome.nome); // Exibe o nome no console
+        }
+      }
+    }
+
+    res.json({
+      total: totalGeral,
+      empregados: nomesEmpregados,
+    });
   } catch (error) {
-    console.error("Erro ao calcular o número de funcionários de férias:", error);
-    res.status(500).json({ error: "Erro ao calcular o número de funcionários de férias", details: error.message });
+    console.error("Erro ao calcular avisos:", error);
+    res.status(500).json({ error: "Erro ao processar os dados", details: error.message });
   }
 });
 
@@ -784,6 +853,8 @@ app.post('/experiencia', authMiddleware, async (req, res) => {
 
     const odbcConnection = await connectToOdbc();
     let totalGeral = 0;
+    let empregadosArray = [];
+    let nomesEmpregados = [];
 
     for (const codiEmp of req.user.codi_emp) {
       const intervalos = meses
@@ -795,17 +866,39 @@ app.post('/experiencia', authMiddleware, async (req, res) => {
         .join(' OR ');
 
       const query = `
-        SELECT COUNT(DISTINCT i_empregados) AS total
+        SELECT DISTINCT i_empregados
         FROM bethadba.foempregados
-        WHERE codi_emp = ? AND (${intervalos}) AND contr_exper = 1`
-      const [result] = await odbcConnection.query(query, [codiEmp]);
-      totalGeral += result.total || 0;
+        WHERE codi_emp = ? AND (${intervalos}) AND contr_exper = 1
+      `;
+
+      const resultados = await odbcConnection.query(query, [codiEmp]);
+      totalGeral += resultados.length;
+      empregadosArray.push(...resultados.map(row => row.i_empregados));
     }
 
-    res.json({ total: totalGeral });
+    for (const iEmpregado of empregadosArray) {
+      for (const codiEmp of req.user.codi_emp) { // Adicionando o filtro codi_emp
+        const queryNome = `
+          SELECT nome
+          FROM bethadba.foempregados
+          WHERE i_empregados = ? AND codi_emp = ?
+        `;
+
+        const [resultadoNome] = await odbcConnection.query(queryNome, [iEmpregado, codiEmp]);
+        if (resultadoNome) {
+          nomesEmpregados.push(resultadoNome.nome);
+          console.log(resultadoNome.nome); // Exibe o nome no console
+        }
+      }
+    }
+
+    res.json({
+      total: totalGeral,
+      empregados: nomesEmpregados,
+    });
   } catch (error) {
-    console.error("Erro ao calcular o número de funcionários de férias:", error);
-    res.status(500).json({ error: "Erro ao calcular o número de funcionários de férias", details: error.message });
+    console.error("Erro ao calcular experiências:", error);
+    res.status(500).json({ error: "Erro ao processar os dados", details: error.message });
   }
 });
 
