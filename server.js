@@ -808,8 +808,8 @@ app.post('/avisos', authMiddleware, async (req, res) => {
       // Consulta com filtro de codi_emp
       const query = `
         SELECT DISTINCT i_empregados
-        FROM bethadba.forescisoes
-        WHERE codi_emp = ? AND (${intervalos}) AND aviso_previo = 2
+        FROM bethadba.forescisoesaviso
+        WHERE codi_emp = ? AND (${intervalos}) AND TIPO = 1
       `;
 
       const resultados = await odbcConnection.query(query, [codiEmp]);
