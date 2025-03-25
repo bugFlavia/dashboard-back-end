@@ -11,6 +11,16 @@ const app = express();
 const port = process.env.PORT || 3003;
 const SECRET_KEY = process.env.SECRET_KEY || 'secreto';
 
+const cors = require("cors");
+
+app.use(
+  cors({
+    origin: "http://localhost:3000",
+    credentials: true, // Permite envio de cookies
+  })
+);
+
+
 // Middleware
 app.use(cors());
 app.use(bodyParser.json());
