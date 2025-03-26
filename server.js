@@ -11,33 +11,48 @@ const app = express();
 const port = process.env.PORT || 3003;
 const SECRET_KEY = process.env.SECRET_KEY || 'secreto';
 
-const cors = require("cors");
+const allowedOrigins = ["http://localhost:3000", "http://192.168.1.29:3000"];
 
-app.use(
-  cors({
-    origin: "http://localhost:3000",
-    credentials: true, // Permite envio de cookies
-  })
-);
+// Configuração de CORS personalizada
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (allowedOrigins.includes(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin); // Permitir a origem específica
+    res.setHeader("Access-Control-Allow-Credentials", "true"); // Permitir envio de credenciais
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS"); // Métodos permitidos
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization"); // Cabeçalhos permitidos
+  }
+  
+  if (req.method === "OPTIONS") {
+    return res.status(200).end(); // Responder rapidamente a requisições preflight
+  }
+  
+  next();
+});
 
+// Middleware genérico de CORS
+app.use(cors({
+  origin: allowedOrigins,
+  credentials: true // Configurações para suportar credenciais
+}));
 
-// Middleware
-app.use(cors());
+// Outros middlewares
 app.use(bodyParser.json());
 app.use(cookieParser());
 
 // Middleware de autenticação
 function authMiddleware(req, res, next) {
-  const token = req.cookies.token;
+  const token = req.cookies.token; // Captura o token do cookie
   if (!token) {
-    return res.status(401).json({ error: 'Acesso negado. Faça login.' });
+    return res.status(401).json({ error: 'Acesso negado. Faça login.' }); // Nenhum token presente
   }
+  
   try {
-    const decoded = jwt.verify(token, SECRET_KEY);
-    req.user = decoded;
+    const decoded = jwt.verify(token, SECRET_KEY); // Decodifica e verifica o token
+    req.user = decoded; // Adiciona o usuário à requisição
     next();
   } catch (err) {
-    return res.status(403).json({ error: 'Token inválido.' });
+    return res.status(403).json({ error: 'Token inválido.' }); // Token inválido
   }
 }
 
@@ -76,8 +91,7 @@ async function filtrarRubricas() {
   }
 }
 
-
-// Rota de login
+// Rota de login sem middleware de autenticação
 app.post('/login', async (req, res) => {
   try {
     const { email, senha } = req.body;
@@ -97,15 +111,18 @@ app.post('/login', async (req, res) => {
       { expiresIn: '1h' }
     );
 
-    res.cookie('token', token, { httpOnly: true, secure: process.env.NODE_ENV === 'production' });
-    res.json({ message: 'Login bem-sucedido' });
+    res.cookie('token', token, {
+      httpOnly: true, 
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'None' : 'Lax'
+    });
+    res.json({ message: 'Login bem-sucedido', token });
   } catch (error) {
     res.status(500).json({ error: 'Erro ao fazer login', details: error.message });
   }
 });
 
-
-// Rota para listar todos os usuários
+// Exemplo de rota protegida
 app.get('/users', authMiddleware, async (req, res) => {
   try {
     const users = await User.findAll();
