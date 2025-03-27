@@ -266,32 +266,18 @@ app.delete('/user/:id', async (req, res) => {
   }
 });
 
+// Rota somaEntradas
 app.post('/somaEntradas', authMiddleware, async (req, res) => {
   try {
-    const { meses, ano, empresas } = req.body;
+    const { meses, ano } = req.body;
 
-    // Validação dos parâmetros obrigatórios
     if (!meses || !ano || !Array.isArray(meses)) {
       return res.status(400).json({ error: 'Ano e um array de meses são obrigatórios.' });
     }
 
-    let codiEmpList;
-
-    // Diferenciar entre administrador e empresa
-    if (req.user.is_admin) {
-      // Administradores: usar o array fornecido em `empresas`
-      if (!empresas || !Array.isArray(empresas) || empresas.length === 0) {
-        return res.status(400).json({ error: 'Administradores devem fornecer um array de códigos de empresa.' });
-      }
-      codiEmpList = empresas; // Usa os códigos fornecidos no body
-    } else {
-      // Empresas comuns: usar o `codi_emp` associado no token
-      codiEmpList = req.user.codi_emp;
-
-      if (!codiEmpList || codiEmpList.length === 0) {
-        return res.status(400).json({ error: 'O usuário logado não possui códigos de empresa associados.' });
-      }
-    }
+    const intervalos = meses
+      .map(mes => `DATA_ENTRADA BETWEEN '${ano}-${mes}-01' AND '${ano}-${mes}-${getUltimoDiaMes(ano, mes)}'`)
+      .join(' OR ');
 
     const odbcConnection = await connectToOdbc();
 
@@ -299,26 +285,15 @@ app.post('/somaEntradas', authMiddleware, async (req, res) => {
     let totalComExcluidos = 0;
     const cfopsExcluidosGeral = [];
 
-    // Construir a condição de intervalos de meses para a consulta
-    const intervalos = meses
-      .map(mes => `DATA_ENTRADA BETWEEN '${ano}-${mes}-01' AND '${ano}-${mes}-${getUltimoDiaMes(ano, mes)}'`)
-      .join(' OR ');
-
-    // Processar cada código de empresa
-    for (const codiEmp of codiEmpList) {
+    // Loop para processar todos os códigos de empresa
+    for (const codiEmp of req.user.codi_emp) {
       const query = `
         SELECT vcon_ent, codi_nat
         FROM bethadba.efentradas
         WHERE codi_emp = ? AND (${intervalos})
       `;
 
-      // Executa a consulta para o código da empresa atual
       const resultados = await odbcConnection.query(query, [codiEmp]);
-
-      if (!resultados || resultados.length === 0) {
-        continue; // Ignorar se não houver resultados
-      }
-
       const { filtrados, somaExcluida, excluidos } = filtrarResultados(resultados);
 
       totalSemExcluidos += filtrados.reduce((acc, row) => acc + (row.vcon_ent || 0), 0);
@@ -326,14 +301,12 @@ app.post('/somaEntradas', authMiddleware, async (req, res) => {
       cfopsExcluidosGeral.push(...excluidos.map(row => row.codi_nat));
     }
 
-    // Retorno com os totais calculados
     res.json({
       totalSemExcluidos,
       totalComExcluidos: totalSemExcluidos + totalComExcluidos,
-      cfopsExcluidos: cfopsExcluidosGeral,
+      cfopsExcluidos: cfopsExcluidosGeral
     });
   } catch (error) {
-    console.error('Erro ao calcular a soma de entradas:', error);
     res.status(500).json({ error: 'Erro ao calcular a soma de entradas', details: error.message });
   }
 });
