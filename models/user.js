@@ -21,8 +21,12 @@ const User = sequelize.define('User', {
   },
   cnpj: {
     type: DataTypes.STRING,
-    allowNull: false,
-    unique: true  // Garantir que o CNPJ seja único
+    allowNull: true, // Permite null para administradores
+    unique: true, // Garante unicidade quando definido
+  },
+  is_admin: {
+    type: DataTypes.BOOLEAN,
+    allowNull: false, // Torna obrigatório no modelo
   },
   codi_emp: {
     type: DataTypes.JSON,
@@ -34,7 +38,8 @@ const User = sequelize.define('User', {
   },
   email: {
     type: DataTypes.STRING,
-    allowNull: false
+    allowNull: false,
+    unique: true // Garante unicidade do campo email
   },
   senha: {
     type: DataTypes.STRING,

@@ -40,6 +40,28 @@ app.use(cors({
 app.use(bodyParser.json());
 app.use(cookieParser());
 
+function validarTipoUsuario(req, res, next) {
+  const { is_admin, codi_emp } = req.user; // Obtém as informações do token
+  const { meses, ano, empresas } = req.body; // Obtém os dados enviados na requisição
+
+  // Verifica se meses e ano foram fornecidos
+  if (!meses || !ano || !Array.isArray(meses)) {
+    return res.status(400).json({ error: 'Ano e um array de meses são obrigatórios.' });
+  }
+
+  // Se o usuário for administrador, valida o array de empresas
+  if (is_admin) {
+    if (!empresas || !Array.isArray(empresas) || empresas.length === 0) {
+      return res.status(400).json({ error: 'Administradores devem fornecer um array de códigos de empresa.' });
+    }
+    req.empresasSelecionadas = empresas; // Armazena as empresas no request
+  } else {
+    req.empresasSelecionadas = codi_emp; // Empresas logadas acessam apenas seus próprios códigos
+  }
+
+  next();
+}
+
 // Middleware de autenticação
 function authMiddleware(req, res, next) {
   const token = req.cookies.token; // Captura o token do cookie
@@ -54,6 +76,25 @@ function authMiddleware(req, res, next) {
   } catch (err) {
     return res.status(403).json({ error: 'Token inválido.' }); // Token inválido
   }
+}
+
+async function validarCNPJ(req, res, next) {
+  const { is_admin, cnpj } = req.body;
+
+  // Validar que o CNPJ só pode ser `null` para administradores
+  if (cnpj === null && !is_admin) {
+    return res.status(400).json({ error: 'Apenas administradores podem ter CNPJ como "null".' });
+  }
+
+  // Validar a unicidade do CNPJ quando fornecido
+  if (cnpj) {
+    const usuarioExistente = await User.findOne({ where: { cnpj } });
+    if (usuarioExistente) {
+      return res.status(400).json({ error: 'O CNPJ precisa ser único.' });
+    }
+  }
+
+  next();
 }
 
 // Função para calcular o último dia do mês
@@ -95,6 +136,11 @@ async function filtrarRubricas() {
 app.post('/login', async (req, res) => {
   try {
     const { email, senha } = req.body;
+
+    if (!email || !senha) {
+      return res.status(400).json({ error: 'Email e senha são obrigatórios.' });
+    }
+
     const user = await User.findOne({ where: { email, senha } });
 
     if (!user) {
@@ -105,17 +151,18 @@ app.post('/login', async (req, res) => {
       {
         id: user.id,
         email: user.email,
-        codi_emp: user.codi_emp, // Envia o array de códigos
+        codi_emp: user.codi_emp,
       },
       SECRET_KEY,
       { expiresIn: '1h' }
     );
 
     res.cookie('token', token, {
-      httpOnly: true, 
+      httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: process.env.NODE_ENV === 'production' ? 'None' : 'Lax'
     });
+
     res.json({ message: 'Login bem-sucedido', token });
   } catch (error) {
     res.status(500).json({ error: 'Erro ao fazer login', details: error.message });
@@ -132,20 +179,47 @@ app.get('/users', authMiddleware, async (req, res) => {
   }
 });
 
-app.post('/user', async (req, res) => {
+app.get('/empresas', authMiddleware, async (req, res) => {
   try {
-    const { nome, nome_empresa, cpf, cnpj, codi_emp, celular, email, senha} = req.body;
-    const user = await User.create({ nome, nome_empresa, cpf, cnpj, codi_emp, celular, email, senha});
+    // Filtra apenas empresas (onde is_admin é false)
+    const users = await User.findAll({ where: { is_admin: false } });
+    res.json(users);
+  } catch (error) {
+    res.status(500).json({ error: 'Erro ao listar empresas', details: error.message });
+  }
+});
+
+app.post('/user', validarCNPJ, async (req, res) => {
+  try {
+    const { nome, nome_empresa, cpf, cnpj, codi_emp, celular, email, senha, is_admin } = req.body;
+
+    // Garantir que is_admin foi enviado
+    if (typeof is_admin === 'undefined') {
+      return res.status(400).json({ error: 'O campo "is_admin" é obrigatório.' });
+    }
+
+    const user = await User.create({ 
+      nome, 
+      nome_empresa, 
+      cpf, 
+      cnpj, 
+      codi_emp, 
+      celular, 
+      email, 
+      senha, 
+      is_admin 
+    });
+
     res.status(201).json(user);
   } catch (error) {
-    console.error("Erro ao criar usuário:", error); // Exibe erro detalhado no console
+    console.error("Erro ao criar usuário:", error);
     res.status(500).json({ error: 'Erro ao criar usuário', details: error.message });
   }
 });
 
-app.put('/user/:id', async (req, res) => {
+app.put('/user/:id', validarCNPJ, async (req, res) => {
   try {
-    const id = req.params.id; // Mantendo o req.params.id, mas corrigindo a sintaxe
+    const { id } = req.params;
     const dadosAtualizados = req.body;
 
     // Impede alterações no campo `id`
@@ -153,7 +227,6 @@ app.put('/user/:id', async (req, res) => {
       return res.status(400).json({ error: 'O campo "id" não pode ser alterado.' });
     }
 
-    // Busca o usuário no banco de dados
     const user = await User.findByPk(id);
 
     if (!user) {
@@ -167,22 +240,14 @@ app.put('/user/:id', async (req, res) => {
       }
     });
 
-    await user.save(); // Salva as alterações no banco de dados
+    await user.save();
 
-    // Retorna apenas os campos atualizados para o cliente
-    const respostaAtualizada = Object.keys(dadosAtualizados).reduce((acc, campo) => {
-      acc[campo] = user[campo];
-      return acc;
-    }, {});
-
-    res.json(respostaAtualizada); // Envia apenas os campos atualizados
+    res.json(user);
   } catch (error) {
     console.error("Erro ao atualizar usuário:", error);
     res.status(500).json({ error: 'Erro ao atualizar usuário', details: error.message });
   }
 });
-
-
 
 app.delete('/user/:id', async (req, res) => {
   try {
@@ -201,18 +266,32 @@ app.delete('/user/:id', async (req, res) => {
   }
 });
 
-// Rota somaEntradas
 app.post('/somaEntradas', authMiddleware, async (req, res) => {
   try {
-    const { meses, ano } = req.body;
+    const { meses, ano, empresas } = req.body;
 
+    // Validação dos parâmetros obrigatórios
     if (!meses || !ano || !Array.isArray(meses)) {
       return res.status(400).json({ error: 'Ano e um array de meses são obrigatórios.' });
     }
 
-    const intervalos = meses
-      .map(mes => `DATA_ENTRADA BETWEEN '${ano}-${mes}-01' AND '${ano}-${mes}-${getUltimoDiaMes(ano, mes)}'`)
-      .join(' OR ');
+    let codiEmpList;
+
+    // Diferenciar entre administrador e empresa
+    if (req.user.is_admin) {
+      // Administradores: usar o array fornecido em `empresas`
+      if (!empresas || !Array.isArray(empresas) || empresas.length === 0) {
+        return res.status(400).json({ error: 'Administradores devem fornecer um array de códigos de empresa.' });
+      }
+      codiEmpList = empresas; // Usa os códigos fornecidos no body
+    } else {
+      // Empresas comuns: usar o `codi_emp` associado no token
+      codiEmpList = req.user.codi_emp;
+
+      if (!codiEmpList || codiEmpList.length === 0) {
+        return res.status(400).json({ error: 'O usuário logado não possui códigos de empresa associados.' });
+      }
+    }
 
     const odbcConnection = await connectToOdbc();
 
@@ -220,15 +299,26 @@ app.post('/somaEntradas', authMiddleware, async (req, res) => {
     let totalComExcluidos = 0;
     const cfopsExcluidosGeral = [];
 
-    // Loop para processar todos os códigos de empresa
-    for (const codiEmp of req.user.codi_emp) {
+    // Construir a condição de intervalos de meses para a consulta
+    const intervalos = meses
+      .map(mes => `DATA_ENTRADA BETWEEN '${ano}-${mes}-01' AND '${ano}-${mes}-${getUltimoDiaMes(ano, mes)}'`)
+      .join(' OR ');
+
+    // Processar cada código de empresa
+    for (const codiEmp of codiEmpList) {
       const query = `
         SELECT vcon_ent, codi_nat
         FROM bethadba.efentradas
         WHERE codi_emp = ? AND (${intervalos})
       `;
 
+      // Executa a consulta para o código da empresa atual
       const resultados = await odbcConnection.query(query, [codiEmp]);
+
+      if (!resultados || resultados.length === 0) {
+        continue; // Ignorar se não houver resultados
+      }
+
       const { filtrados, somaExcluida, excluidos } = filtrarResultados(resultados);
 
       totalSemExcluidos += filtrados.reduce((acc, row) => acc + (row.vcon_ent || 0), 0);
@@ -236,12 +326,14 @@ app.post('/somaEntradas', authMiddleware, async (req, res) => {
       cfopsExcluidosGeral.push(...excluidos.map(row => row.codi_nat));
     }
 
+    // Retorno com os totais calculados
     res.json({
       totalSemExcluidos,
       totalComExcluidos: totalSemExcluidos + totalComExcluidos,
-      cfopsExcluidos: cfopsExcluidosGeral
+      cfopsExcluidos: cfopsExcluidosGeral,
     });
   } catch (error) {
+    console.error('Erro ao calcular a soma de entradas:', error);
     res.status(500).json({ error: 'Erro ao calcular a soma de entradas', details: error.message });
   }
 });
