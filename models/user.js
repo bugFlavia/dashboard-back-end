@@ -24,10 +24,6 @@ const User = sequelize.define('User', {
     allowNull: true, // Permite null para administradores
     unique: true, // Garante unicidade quando definido
   },
-  is_admin: {
-    type: DataTypes.BOOLEAN,
-    allowNull: false, // Torna obrigatório no modelo
-  },
   codi_emp: {
     type: DataTypes.JSON,
     allowNull: false
@@ -44,7 +40,12 @@ const User = sequelize.define('User', {
   senha: {
     type: DataTypes.STRING,
     allowNull: false
-  }
+  },
+  is_admin: {
+    type: DataTypes.INTEGER,
+    allowNull: true, // Permitir valores nulos
+    defaultValue: 0, // Valor padrão como null para usuários padrão
+  },
 }, {
   tableName: 'users',
   timestamps: false
