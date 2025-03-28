@@ -40,28 +40,6 @@ app.use(cors({
 app.use(bodyParser.json());
 app.use(cookieParser());
 
-function validarTipoUsuario(req, res, next) {
-  const { is_admin, codi_emp } = req.user; // Obtém as informações do token
-  const { meses, ano, empresas } = req.body; // Obtém os dados enviados na requisição
-
-  // Verifica se meses e ano foram fornecidos
-  if (!meses || !ano || !Array.isArray(meses)) {
-    return res.status(400).json({ error: 'Ano e um array de meses são obrigatórios.' });
-  }
-
-  // Se o usuário for administrador, valida o array de empresas
-  if (is_admin) {
-    if (!empresas || !Array.isArray(empresas) || empresas.length === 0) {
-      return res.status(400).json({ error: 'Administradores devem fornecer um array de códigos de empresa.' });
-    }
-    req.empresasSelecionadas = empresas; // Armazena as empresas no request
-  } else {
-    req.empresasSelecionadas = codi_emp; // Empresas logadas acessam apenas seus próprios códigos
-  }
-
-  next();
-}
-
 // Middleware de autenticação
 function authMiddleware(req, res, next) {
   const token = req.cookies.token; // Captura o token do cookie
@@ -152,6 +130,7 @@ app.post('/login', async (req, res) => {
         id: user.id,
         email: user.email,
         codi_emp: user.codi_emp,
+        is_admin: user.is_admin // 0 ou 1 diretamente do banco de dados
       },
       SECRET_KEY,
       { expiresIn: '1h' }
@@ -191,12 +170,7 @@ app.get('/empresas', authMiddleware, async (req, res) => {
 
 app.post('/user', validarCNPJ, async (req, res) => {
   try {
-    const { nome, nome_empresa, cpf, cnpj, codi_emp, celular, email, senha, is_admin } = req.body;
-
-    // Garantir que is_admin foi enviado
-    if (typeof is_admin === 'undefined') {
-      return res.status(400).json({ error: 'O campo "is_admin" é obrigatório.' });
-    }
+    const { nome, nome_empresa, cpf, cnpj, codi_emp, celular, email, senha, is_admin} = req.body;
 
     const user = await User.create({ 
       nome, 
@@ -207,7 +181,7 @@ app.post('/user', validarCNPJ, async (req, res) => {
       celular, 
       email, 
       senha, 
-      is_admin 
+      is_admin: 0
     });
 
     res.status(201).json(user);
@@ -266,8 +240,8 @@ app.delete('/user/:id', async (req, res) => {
   }
 });
 
-// Rota somaEntradas
 app.post('/somaEntradas', authMiddleware, async (req, res) => {
+  const isAdmin = req.user.is_admin; // 0 ou 1 diretamente do banco de dados
   try {
     const { meses, ano } = req.body;
 
@@ -285,33 +259,60 @@ app.post('/somaEntradas', authMiddleware, async (req, res) => {
     let totalComExcluidos = 0;
     const cfopsExcluidosGeral = [];
 
-    // Loop para processar todos os códigos de empresa
-    for (const codiEmp of req.user.codi_emp) {
-      const query = `
-        SELECT vcon_ent, codi_nat
-        FROM bethadba.efentradas
-        WHERE codi_emp = ? AND (${intervalos})
-      `;
+    if (isAdmin === 0){
+      // Loop para processar todos os códigos de empresa
+      for (const codiEmp of req.user.codi_emp) {
+        const query = `
+          SELECT vcon_ent, codi_nat
+          FROM bethadba.efentradas
+          WHERE codi_emp = ? AND (${intervalos})
+        `;
 
-      const resultados = await odbcConnection.query(query, [codiEmp]);
-      const { filtrados, somaExcluida, excluidos } = filtrarResultados(resultados);
+        const resultados = await odbcConnection.query(query, [codiEmp]);
+        const { filtrados, somaExcluida, excluidos } = filtrarResultados(resultados);
 
-      totalSemExcluidos += filtrados.reduce((acc, row) => acc + (row.vcon_ent || 0), 0);
-      totalComExcluidos += somaExcluida;
-      cfopsExcluidosGeral.push(...excluidos.map(row => row.codi_nat));
+        totalSemExcluidos += filtrados.reduce((acc, row) => acc + (row.vcon_ent || 0), 0);
+        totalComExcluidos += somaExcluida;
+        cfopsExcluidosGeral.push(...excluidos.map(row => row.codi_nat));
+      }
+
+      res.json({
+        totalSemExcluidos,
+        totalComExcluidos: totalSemExcluidos + totalComExcluidos,
+        cfopsExcluidos: cfopsExcluidosGeral
+      });
+    } 
+    else {
+        // Loop para processar todos os códigos de empresa
+      for (const codiEmp of req.body.codigo_empresa) {
+        const query = `
+          SELECT vcon_ent, codi_nat
+          FROM bethadba.efentradas
+          WHERE codi_emp = ? AND (${intervalos})
+        `;
+
+        const resultados = await odbcConnection.query(query, [codiEmp]);
+        const { filtrados, somaExcluida, excluidos } = filtrarResultados(resultados);
+
+        totalSemExcluidos += filtrados.reduce((acc, row) => acc + (row.vcon_ent || 0), 0);
+        totalComExcluidos += somaExcluida;
+        cfopsExcluidosGeral.push(...excluidos.map(row => row.codi_nat));
+      }
+
+      res.json({
+        totalSemExcluidos,
+        totalComExcluidos: totalSemExcluidos + totalComExcluidos,
+        cfopsExcluidos: cfopsExcluidosGeral
+      });
     }
-
-    res.json({
-      totalSemExcluidos,
-      totalComExcluidos: totalSemExcluidos + totalComExcluidos,
-      cfopsExcluidos: cfopsExcluidosGeral
-    });
   } catch (error) {
     res.status(500).json({ error: 'Erro ao calcular a soma de entradas', details: error.message });
   }
 });
 
+
 app.post('/somaSaidas', authMiddleware, async (req, res) => {
+  const isAdmin = req.user.is_admin;
   try {
     const { meses, ano } = req.body;
 
@@ -329,27 +330,50 @@ app.post('/somaSaidas', authMiddleware, async (req, res) => {
     let totalComExcluidos = 0;
     const cfopsExcluidosGeral = [];
 
-    // Loop para processar todos os códigos de empresa
-    for (const codiEmp of req.user.codi_emp) {
-      const query = `
-        SELECT vcon_sai, codi_nat
-        FROM bethadba.efsaidas
-        WHERE codi_emp = ? AND (${intervalos})
-      `;
+    if(isAdmin === 0){
+      for (const codiEmp of req.user.codi_emp) {
+        const query = `
+          SELECT vcon_sai, codi_nat
+          FROM bethadba.efsaidas
+          WHERE codi_emp = ? AND (${intervalos})
+        `;
 
-      const resultados = await odbcConnection.query(query, [codiEmp]);
-      const { filtrados, somaExcluida, excluidos } = filtrarResultados(resultados);
+        const resultados = await odbcConnection.query(query, [codiEmp]);
+        const { filtrados, somaExcluida, excluidos } = filtrarResultados(resultados);
 
-      totalSemExcluidos += filtrados.reduce((acc, row) => acc + (row.vcon_sai || 0), 0);
-      totalComExcluidos += somaExcluida;
-      cfopsExcluidosGeral.push(...excluidos.map(row => row.codi_nat));
+        totalSemExcluidos += filtrados.reduce((acc, row) => acc + (row.vcon_sai || 0), 0);
+        totalComExcluidos += somaExcluida;
+        cfopsExcluidosGeral.push(...excluidos.map(row => row.codi_nat));
+      }
+
+      res.json({
+        totalSemExcluidos,
+        totalComExcluidos: totalSemExcluidos + totalComExcluidos,
+        cfopsExcluidos: cfopsExcluidosGeral
+      });
     }
+    else{
+      for (const codiEmp of req.body.codigo_empresa) {
+        const query = `
+          SELECT vcon_sai, codi_nat
+          FROM bethadba.efsaidas
+          WHERE codi_emp = ? AND (${intervalos})
+        `;
 
-    res.json({
-      totalSemExcluidos,
-      totalComExcluidos: totalSemExcluidos + totalComExcluidos,
-      cfopsExcluidos: cfopsExcluidosGeral
-    });
+        const resultados = await odbcConnection.query(query, [codiEmp]);
+        const { filtrados, somaExcluida, excluidos } = filtrarResultados(resultados);
+
+        totalSemExcluidos += filtrados.reduce((acc, row) => acc + (row.vcon_sai || 0), 0);
+        totalComExcluidos += somaExcluida;
+        cfopsExcluidosGeral.push(...excluidos.map(row => row.codi_nat));
+      }
+
+      res.json({
+        totalSemExcluidos,
+        totalComExcluidos: totalSemExcluidos + totalComExcluidos,
+        cfopsExcluidos: cfopsExcluidosGeral
+      });
+    }
   } catch (error) {
     res.status(500).json({ error: 'Erro ao calcular a soma de saídas', details: error.message });
   }
