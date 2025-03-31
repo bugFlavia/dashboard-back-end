@@ -110,6 +110,28 @@ async function filtrarRubricas() {
   }
 }
 
+async function filtrarUsuario(req) {
+  try {
+    const isAdmin = req.user.is_admin; // Verifica se o usuário é administrador
+    let codigosEmpresa = [];
+
+    if (isAdmin === 0) {
+      // Usuário não administrador
+      codigosEmpresa = req.user.codi_emp || []; // Obtém codi_emp do usuário autenticado
+    } else {
+      // Usuário administrador
+      codigosEmpresa = req.body.codigo_empresa || []; // Obtém codi_emp da requisição
+    }
+
+    return codigosEmpresa;
+  } catch (error) {
+    console.error("Erro ao filtrar usuário:", error);
+    throw new Error("Erro ao processar o filtro de usuário");
+  }
+}
+
+module.exports = filtrarUsuario;
+
 // Rota de login sem middleware de autenticação
 app.post('/login', async (req, res) => {
   try {
@@ -241,9 +263,9 @@ app.delete('/user/:id', async (req, res) => {
 });
 
 app.post('/somaEntradas', authMiddleware, async (req, res) => {
-  const isAdmin = req.user.is_admin; // 0 ou 1 diretamente do banco de dados
   try {
     const { meses, ano } = req.body;
+    const codigosEmpresa = await filtrarUsuario(req); // Filtra os códigos de empresa
 
     if (!meses || !ano || !Array.isArray(meses)) {
       return res.status(400).json({ error: 'Ano e um array de meses são obrigatórios.' });
@@ -259,62 +281,35 @@ app.post('/somaEntradas', authMiddleware, async (req, res) => {
     let totalComExcluidos = 0;
     const cfopsExcluidosGeral = [];
 
-    if (isAdmin === 0){
-      // Loop para processar todos os códigos de empresa
-      for (const codiEmp of req.user.codi_emp) {
-        const query = `
-          SELECT vcon_ent, codi_nat
-          FROM bethadba.efentradas
-          WHERE codi_emp = ? AND (${intervalos})
-        `;
+    for (const codiEmp of codigosEmpresa) {
+      const query = `
+        SELECT vcon_ent, codi_nat
+        FROM bethadba.efentradas
+        WHERE codi_emp = ? AND (${intervalos})
+      `;
 
-        const resultados = await odbcConnection.query(query, [codiEmp]);
-        const { filtrados, somaExcluida, excluidos } = filtrarResultados(resultados);
+      const resultados = await odbcConnection.query(query, [codiEmp]);
+      const { filtrados, somaExcluida, excluidos } = filtrarResultados(resultados);
 
-        totalSemExcluidos += filtrados.reduce((acc, row) => acc + (row.vcon_ent || 0), 0);
-        totalComExcluidos += somaExcluida;
-        cfopsExcluidosGeral.push(...excluidos.map(row => row.codi_nat));
-      }
-
-      res.json({
-        totalSemExcluidos,
-        totalComExcluidos: totalSemExcluidos + totalComExcluidos,
-        cfopsExcluidos: cfopsExcluidosGeral
-      });
-    } 
-    else {
-        // Loop para processar todos os códigos de empresa
-      for (const codiEmp of req.body.codigo_empresa) {
-        const query = `
-          SELECT vcon_ent, codi_nat
-          FROM bethadba.efentradas
-          WHERE codi_emp = ? AND (${intervalos})
-        `;
-
-        const resultados = await odbcConnection.query(query, [codiEmp]);
-        const { filtrados, somaExcluida, excluidos } = filtrarResultados(resultados);
-
-        totalSemExcluidos += filtrados.reduce((acc, row) => acc + (row.vcon_ent || 0), 0);
-        totalComExcluidos += somaExcluida;
-        cfopsExcluidosGeral.push(...excluidos.map(row => row.codi_nat));
-      }
-
-      res.json({
-        totalSemExcluidos,
-        totalComExcluidos: totalSemExcluidos + totalComExcluidos,
-        cfopsExcluidos: cfopsExcluidosGeral
-      });
+      totalSemExcluidos += filtrados.reduce((acc, row) => acc + (row.vcon_ent || 0), 0);
+      totalComExcluidos += somaExcluida;
+      cfopsExcluidosGeral.push(...excluidos.map(row => row.codi_nat));
     }
+
+    res.json({
+      totalSemExcluidos,
+      totalComExcluidos: totalSemExcluidos + totalComExcluidos,
+      cfopsExcluidos: cfopsExcluidosGeral,
+    });
   } catch (error) {
     res.status(500).json({ error: 'Erro ao calcular a soma de entradas', details: error.message });
   }
 });
 
-
 app.post('/somaSaidas', authMiddleware, async (req, res) => {
-  const isAdmin = req.user.is_admin;
   try {
     const { meses, ano } = req.body;
+    const codigosEmpresa = await filtrarUsuario(req); 
 
     if (!meses || !ano || !Array.isArray(meses)) {
       return res.status(400).json({ error: 'Ano e um array de meses são obrigatórios.' });
@@ -329,51 +324,26 @@ app.post('/somaSaidas', authMiddleware, async (req, res) => {
     let totalSemExcluidos = 0;
     let totalComExcluidos = 0;
     const cfopsExcluidosGeral = [];
+    for (const codiEmp of codigosEmpresa) {
+      const query = `
+        SELECT vcon_sai, codi_nat
+        FROM bethadba.efsaidas
+        WHERE codi_emp = ? AND (${intervalos})
+      `;
 
-    if(isAdmin === 0){
-      for (const codiEmp of req.user.codi_emp) {
-        const query = `
-          SELECT vcon_sai, codi_nat
-          FROM bethadba.efsaidas
-          WHERE codi_emp = ? AND (${intervalos})
-        `;
+      const resultados = await odbcConnection.query(query, [codiEmp]);
+      const { filtrados, somaExcluida, excluidos } = filtrarResultados(resultados);
 
-        const resultados = await odbcConnection.query(query, [codiEmp]);
-        const { filtrados, somaExcluida, excluidos } = filtrarResultados(resultados);
-
-        totalSemExcluidos += filtrados.reduce((acc, row) => acc + (row.vcon_sai || 0), 0);
-        totalComExcluidos += somaExcluida;
-        cfopsExcluidosGeral.push(...excluidos.map(row => row.codi_nat));
-      }
-
-      res.json({
-        totalSemExcluidos,
-        totalComExcluidos: totalSemExcluidos + totalComExcluidos,
-        cfopsExcluidos: cfopsExcluidosGeral
-      });
+      totalSemExcluidos += filtrados.reduce((acc, row) => acc + (row.vcon_sai || 0), 0);
+      totalComExcluidos += somaExcluida;
+      cfopsExcluidosGeral.push(...excluidos.map(row => row.codi_nat));
     }
-    else{
-      for (const codiEmp of req.body.codigo_empresa) {
-        const query = `
-          SELECT vcon_sai, codi_nat
-          FROM bethadba.efsaidas
-          WHERE codi_emp = ? AND (${intervalos})
-        `;
 
-        const resultados = await odbcConnection.query(query, [codiEmp]);
-        const { filtrados, somaExcluida, excluidos } = filtrarResultados(resultados);
-
-        totalSemExcluidos += filtrados.reduce((acc, row) => acc + (row.vcon_sai || 0), 0);
-        totalComExcluidos += somaExcluida;
-        cfopsExcluidosGeral.push(...excluidos.map(row => row.codi_nat));
-      }
-
-      res.json({
-        totalSemExcluidos,
-        totalComExcluidos: totalSemExcluidos + totalComExcluidos,
-        cfopsExcluidos: cfopsExcluidosGeral
-      });
-    }
+    res.json({
+      totalSemExcluidos,
+      totalComExcluidos: totalSemExcluidos + totalComExcluidos,
+      cfopsExcluidos: cfopsExcluidosGeral
+    });
   } catch (error) {
     res.status(500).json({ error: 'Erro ao calcular a soma de saídas', details: error.message });
   }
@@ -383,6 +353,7 @@ app.post('/somaSaidas', authMiddleware, async (req, res) => {
 app.post('/icms', authMiddleware, async (req, res) => {
   try {
     const { meses, ano } = req.body;
+    const codigosEmpresa = await filtrarUsuario(req); 
 
     if (!meses || !ano || !Array.isArray(meses)) {
       return res.status(400).json({ error: 'Ano e um array de meses são obrigatórios' });
@@ -396,7 +367,7 @@ app.post('/icms', authMiddleware, async (req, res) => {
 
     const resultadosPorEmpresa = {};
 
-    for (const codiEmp of req.user.codi_emp) {
+    for (const codiEmp of codigosEmpresa) {
       const query = `SELECT COALESCE(SUM(sdev_sim), 0) AS total FROM bethadba.efsdoimp WHERE codi_emp = ? AND (${intervalos}) AND codi_imp = 1`;
 
       const [result] = await odbcConnection.query(query, [codiEmp]);
@@ -414,6 +385,7 @@ app.post('/icms', authMiddleware, async (req, res) => {
 app.post('/pis', authMiddleware, async (req, res) => {
   try {
     const { meses, ano } = req.body;
+    const codigosEmpresa = await filtrarUsuario(req); 
 
     if (!meses || !ano || !Array.isArray(meses)) {
       return res.status(400).json({ error: 'Ano e um array de meses são obrigatórios.' });
@@ -422,7 +394,7 @@ app.post('/pis', authMiddleware, async (req, res) => {
     const odbcConnection = await connectToOdbc();
     let totalGeral = 0;
 
-    for (const codiEmp of req.user.codi_emp) {
+    for (const codiEmp of codigosEmpresa) {
       const intervalos = meses
         .map(mes => `data_sim BETWEEN '${ano}-${mes}-01' AND '${ano}-${mes}-${getUltimoDiaMes(ano, mes)}'`)
         .join(' OR ');
@@ -448,6 +420,7 @@ app.post('/pis', authMiddleware, async (req, res) => {
 app.post('/cofins', authMiddleware, async (req, res) => {
   try {
     const { meses, ano } = req.body;
+    const codigosEmpresa = await filtrarUsuario(req);
 
     if (!meses || !ano || !Array.isArray(meses)) {
       return res.status(400).json({ error: 'Ano e um array de meses são obrigatórios.' });
@@ -456,7 +429,7 @@ app.post('/cofins', authMiddleware, async (req, res) => {
     const odbcConnection = await connectToOdbc();
     let totalGeral = 0;
 
-    for (const codiEmp of req.user.codi_emp) {
+    for (const codiEmp of codigosEmpresa) {
       const intervalos = meses
         .map(mes => `data_sim BETWEEN '${ano}-${mes}-01' AND '${ano}-${mes}-${getUltimoDiaMes(ano, mes)}'`)
         .join(' OR ');
@@ -482,6 +455,7 @@ app.post('/cofins', authMiddleware, async (req, res) => {
 app.post('/valorFolha', authMiddleware, async (req, res) => {
   try {
     const { meses, ano } = req.body;
+    const codigosEmpresa = await filtrarUsuario(req);
 
     if (!meses || !ano || !Array.isArray(meses)) {
       return res.status(400).json({ error: 'Ano e um array de meses são obrigatórios.' });
@@ -492,7 +466,7 @@ app.post('/valorFolha', authMiddleware, async (req, res) => {
     let totalProventos = 0;
     let totalDescontos = 0;
 
-    for (const codiEmp of req.user.codi_emp) {
+    for (const codiEmp of codigosEmpresa) {
       for (const mes of meses) {
         const primeiroDia = `${ano}-${mes.toString().padStart(2, '0')}-01`;
         const ultimoDia = `${ano}-${mes.toString().padStart(2, '0')}-${getUltimoDiaMes(ano, mes)}`;
@@ -537,6 +511,7 @@ app.post('/valorFolha', authMiddleware, async (req, res) => {
 app.post('/irrf', authMiddleware, async (req, res) => {
   try {
     const { meses, ano } = req.body;
+    const codigosEmpresa = await filtrarUsuario(req);
 
     if (!meses || !ano || !Array.isArray(meses)) {
       return res.status(400).json({ error: 'Ano e um array de meses são obrigatórios.' });
@@ -545,7 +520,7 @@ app.post('/irrf', authMiddleware, async (req, res) => {
     const odbcConnection = await connectToOdbc();
     let totalGeral = 0;
 
-    for (const codiEmp of req.user.codi_emp) {
+    for (const codiEmp of codigosEmpresa) {
       const intervalos = meses
         .map(mes => {
           const primeiroDia = `${ano}-${mes.toString().padStart(2, '0')}-01`;
@@ -575,6 +550,7 @@ app.post('/irrf', authMiddleware, async (req, res) => {
 app.post('/inss', authMiddleware, async (req, res) => {
   try {
     const { meses, ano } = req.body;
+    const codigosEmpresa = await filtrarUsuario(req);
 
     if (!meses || !ano || !Array.isArray(meses)) {
       return res.status(400).json({ error: 'Ano e um array de meses são obrigatórios.' });
@@ -583,7 +559,7 @@ app.post('/inss', authMiddleware, async (req, res) => {
     const odbcConnection = await connectToOdbc();
     let totalGeral = 0;
 
-    for (const codiEmp of req.user.codi_emp) {
+    for (const codiEmp of codigosEmpresa) {
       const intervalos = meses
         .map(mes => {
           const primeiroDia = `${ano}-${mes.toString().padStart(2, '0')}-01`;
@@ -613,6 +589,7 @@ app.post('/inss', authMiddleware, async (req, res) => {
 app.post('/fgts', authMiddleware, async (req, res) => {
   try {
     const { meses, ano } = req.body;
+    const codigosEmpresa = await filtrarUsuario(req);
 
     if (!meses || !ano || !Array.isArray(meses)) {
       return res.status(400).json({ error: 'Ano e um array de meses são obrigatórios.' });
@@ -621,7 +598,7 @@ app.post('/fgts', authMiddleware, async (req, res) => {
     const odbcConnection = await connectToOdbc();
     let totalGeral = 0;
 
-    for (const codiEmp of req.user.codi_emp) {
+    for (const codiEmp of codigosEmpresa) {
       const intervalos = meses
         .map(mes => {
           const primeiroDia = `${ano}-${mes.toString().padStart(2, '0')}-01`;
@@ -650,6 +627,7 @@ app.post('/fgts', authMiddleware, async (req, res) => {
 app.post('/demitidos', authMiddleware, async (req, res) => {
   try {
     const { meses, ano } = req.body;
+    const codigosEmpresa = await filtrarUsuario(req);
 
     if (!meses || !ano || !Array.isArray(meses)) {
       return res.status(400).json({ error: 'Ano e um array de meses são obrigatórios.' });
@@ -658,7 +636,7 @@ app.post('/demitidos', authMiddleware, async (req, res) => {
     const odbcConnection = await connectToOdbc();
     let totalGeral = 0;
 
-    for (const codiEmp of req.user.codi_emp) { // Certificando-se de que CODI_EMP é filtrado pelo login do usuário
+    for (const codiEmp of codigosEmpresa) { // Certificando-se de que CODI_EMP é filtrado pelo login do usuário
       const intervalos = meses
         .map(mes => {
           const primeiroDia = `${ano}-${mes.toString().padStart(2, '0')}-01`;
@@ -688,6 +666,7 @@ app.post('/demitidos', authMiddleware, async (req, res) => {
 app.post('/admitidos', authMiddleware, async (req, res) => {
   try {
     const { meses, ano } = req.body;
+    const codigosEmpresa = await filtrarUsuario(req);
 
     if (!meses || !ano || !Array.isArray(meses)) {
       return res.status(400).json({ error: 'Ano e um array de meses são obrigatórios.' });
@@ -696,7 +675,7 @@ app.post('/admitidos', authMiddleware, async (req, res) => {
     const odbcConnection = await connectToOdbc();
     let totalGeral = 0;
 
-    for (const codiEmp of req.user.codi_emp) { // Certificando-se de que CODI_EMP é filtrado pelo login do usuário
+    for (const codiEmp of codigosEmpresa) { // Certificando-se de que CODI_EMP é filtrado pelo login do usuário
       const intervalos = meses
         .map(mes => {
           const primeiroDia = `${ano}-${mes.toString().padStart(2, '0')}-01`;
@@ -726,6 +705,7 @@ app.post('/admitidos', authMiddleware, async (req, res) => {
 app.post('/funcionarios', authMiddleware, async (req, res) => {
   try {
     const { meses, ano } = req.body;
+    const codigosEmpresa = await filtrarUsuario(req);
 
     if (!meses || !ano || !Array.isArray(meses)) {
       return res.status(400).json({ error: 'Ano e um array de meses são obrigatórios.' });
@@ -738,7 +718,7 @@ app.post('/funcionarios', authMiddleware, async (req, res) => {
     let totalEmpregadosAtivos = 0;
     let listaEmpregados = [];
 
-    for (const codiEmp of req.user.codi_emp) {
+    for (const codiEmp of codigosEmpresa) {
       // Consulta na tabela foempregados com lógica condicional
       const queryEmpregadosAtivos = `
         SELECT i_empregados
@@ -784,6 +764,7 @@ app.post('/funcionarios', authMiddleware, async (req, res) => {
 app.post('/ferias', authMiddleware, async (req, res) => {
   try {
     const { meses, ano } = req.body;
+    const codigosEmpresa = await filtrarUsuario(req);
 
     if (!meses || !ano || !Array.isArray(meses)) {
       return res.status(400).json({ error: 'Ano e um array de meses são obrigatórios.' });
@@ -794,7 +775,7 @@ app.post('/ferias', authMiddleware, async (req, res) => {
     let empregadosArray = [];
     let nomesEmpregados = [];
 
-    for (const codiEmp of req.user.codi_emp) {
+    for (const codiEmp of codigosEmpresa) {
       const intervalos = meses
         .map(mes => {
           const primeiroDia = `${ano}-${mes.toString().padStart(2, '0')}-01`;
@@ -843,6 +824,7 @@ app.post('/ferias', authMiddleware, async (req, res) => {
 app.post('/afastados', authMiddleware, async (req, res) => {
   try {
     const { meses, ano } = req.body;
+    const codigosEmpresa = await filtrarUsuario(req);
 
     if (!meses || !ano || !Array.isArray(meses)) {
       return res.status(400).json({ error: 'Ano e um array de meses são obrigatórios.' });
@@ -853,7 +835,7 @@ app.post('/afastados', authMiddleware, async (req, res) => {
     let empregadosArray = [];
     let nomesEmpregados = [];
 
-    for (const codiEmp of req.user.codi_emp) {
+    for (const codiEmp of codigosEmpresa) {
       const intervalos = meses
         .map(mes => {
           const primeiroDia = `${ano}-${mes.toString().padStart(2, '0')}-01`;
@@ -902,6 +884,7 @@ app.post('/afastados', authMiddleware, async (req, res) => {
 app.post('/avisos', authMiddleware, async (req, res) => {
   try {
     const { meses, ano } = req.body;
+    const codigosEmpresa = await filtrarUsuario(req);
 
     if (!meses || !ano || !Array.isArray(meses)) {
       return res.status(400).json({ error: 'Ano e um array de meses são obrigatórios.' });
@@ -912,7 +895,7 @@ app.post('/avisos', authMiddleware, async (req, res) => {
     let empregadosArray = [];
     let nomesEmpregados = [];
 
-    for (const codiEmp of req.user.codi_emp) {
+    for (const codiEmp of codigosEmpresa) {
       const intervalos = meses
         .map(mes => {
           const primeiroDia = `${ano}-${mes.toString().padStart(2, '0')}-01`;
@@ -962,6 +945,7 @@ app.post('/avisos', authMiddleware, async (req, res) => {
 app.post('/experiencia', authMiddleware, async (req, res) => {
   try {
     const { meses, ano } = req.body;
+    const codigosEmpresa = await filtrarUsuario(req);
 
     if (!meses || !ano || !Array.isArray(meses)) {
       return res.status(400).json({ error: 'Ano e um array de meses são obrigatórios.' });
@@ -972,7 +956,7 @@ app.post('/experiencia', authMiddleware, async (req, res) => {
     let empregadosArray = [];
     let nomesEmpregados = [];
 
-    for (const codiEmp of req.user.codi_emp) {
+    for (const codiEmp of codigosEmpresa) {
       const intervalos = meses
         .map(mes => {
           const primeiroDia = `${ano}-${mes.toString().padStart(2, '0')}-01`;
@@ -1021,6 +1005,7 @@ app.post('/experiencia', authMiddleware, async (req, res) => {
 app.post('/horasExtras', authMiddleware, async (req, res) => {
   try {
     const { meses, ano } = req.body;
+    const codigosEmpresa = await filtrarUsuario(req);
 
     if (!meses || !ano || !Array.isArray(meses)) {
       return res.status(400).json({ error: 'Ano e um array de meses são obrigatórios.' });
@@ -1041,7 +1026,7 @@ app.post('/horasExtras', authMiddleware, async (req, res) => {
     let somaValorCal = 0;
 
     // Itera por cada código de empresa do usuário logado
-    for (const codiEmp of req.user.codi_emp) {
+    for (const codiEmp of codigosEmpresa) {
       const query = `
         SELECT SUM(valor_cal) AS total
         FROM bethadba.fomovtoserv
