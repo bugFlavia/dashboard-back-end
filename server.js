@@ -42,17 +42,19 @@ app.use(cookieParser());
 
 // Middleware de autenticação
 function authMiddleware(req, res, next) {
-  const token = req.cookies.token; // Captura o token do cookie
+  console.log("Cookies recebidos no servidor:", req.cookies);
+  console.log(req.cookies.token) // Verifique os cookies recebidos
+  const token = req.cookie.token;
   if (!token) {
-    return res.status(401).json({ error: 'Acesso negado. Faça login.' }); // Nenhum token presente
+    return res.status(401).json({ error: 'Acesso negado. Faça login.' });
   }
-  
+
   try {
-    const decoded = jwt.verify(token, SECRET_KEY); // Decodifica e verifica o token
-    req.user = decoded; // Adiciona o usuário à requisição
+    const decoded = jwt.verify(token, SECRET_KEY);
+    req.user = decoded;
     next();
   } catch (err) {
-    return res.status(403).json({ error: 'Token inválido.' }); // Token inválido
+    return res.status(403).json({ error: 'Token inválido.' });
   }
 }
 
@@ -160,8 +162,8 @@ app.post('/login', async (req, res) => {
 
     res.cookie('token', token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: process.env.NODE_ENV === 'production' ? 'None' : 'Lax'
+      secure: false,
+      sameSite: 'Lax'
     });
 
     res.json({ message: 'Login bem-sucedido', token });
