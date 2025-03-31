@@ -182,8 +182,7 @@ app.get('/users', authMiddleware, async (req, res) => {
 
 app.get('/empresas', authMiddleware, async (req, res) => {
   try {
-    // Filtra apenas empresas (onde is_admin é false)
-    const users = await User.findAll({ where: { is_admin: false } });
+    const users = await User.findAll({ where: { is_admin: 0 } });
     res.json(users);
   } catch (error) {
     res.status(500).json({ error: 'Erro ao listar empresas', details: error.message });
