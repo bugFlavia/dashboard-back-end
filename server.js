@@ -795,7 +795,7 @@ app.post('/ferias', authMiddleware, async (req, res) => {
     }
 
     for (const iEmpregado of empregadosArray) {
-      for (const codiEmp of req.user.codi_emp) { // Adicionando o filtro codi_emp
+      for (const codiEmp of codigosEmpresa) { // Adicionando o filtro codi_emp
         const queryNome = `
           SELECT nome
           FROM bethadba.foempregados
@@ -855,7 +855,7 @@ app.post('/afastados', authMiddleware, async (req, res) => {
     }
 
     for (const iEmpregado of empregadosArray) {
-      for (const codiEmp of req.user.codi_emp) { // Adicionando o filtro de codi_emp
+      for (const codiEmp of codigosEmpresa) { // Adicionando o filtro de codi_emp
         const queryNome = `
           SELECT nome
           FROM bethadba.foempregados
@@ -916,7 +916,7 @@ app.post('/avisos', authMiddleware, async (req, res) => {
     }
 
     for (const iEmpregado of empregadosArray) {
-      for (const codiEmp of req.user.codi_emp) { // Adicionando o filtro codi_emp
+      for (const codiEmp of codigosEmpresa) { // Adicionando o filtro codi_emp
         const queryNome = `
           SELECT nome
           FROM bethadba.foempregados
@@ -976,7 +976,7 @@ app.post('/experiencia', authMiddleware, async (req, res) => {
     }
 
     for (const iEmpregado of empregadosArray) {
-      for (const codiEmp of req.user.codi_emp) { // Adicionando o filtro codi_emp
+      for (const codiEmp of codigosEmpresa) { // Adicionando o filtro codi_emp
         const queryNome = `
           SELECT nome
           FROM bethadba.foempregados
