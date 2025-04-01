@@ -40,11 +40,8 @@ app.use(cors({
 app.use(bodyParser.json());
 app.use(cookieParser());
 
-// Middleware de autenticação
 function authMiddleware(req, res, next) {
-  console.log("Cookies recebidos no servidor:", req.cookies);
-  console.log(req.cookies.token) // Verifique os cookies recebidos
-  const token = req.cookie.token;
+  const token = req.cookies.token; // Obtenha o token corretamente do cookie
   if (!token) {
     return res.status(401).json({ error: 'Acesso negado. Faça login.' });
   }
@@ -161,9 +158,9 @@ app.post('/login', async (req, res) => {
     );
 
     res.cookie('token', token, {
-      httpOnly: true,
-      secure: false,
-      sameSite: 'Lax'
+      httpOnly: true, // Evita acesso via JavaScript no front-end
+      secure: false, // Alterar para true em produção
+      sameSite: 'Lax', // Evita problemas com navegadores
     });
 
     res.json({ message: 'Login bem-sucedido', token });
