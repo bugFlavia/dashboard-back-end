@@ -10,25 +10,7 @@ const connectToOdbc = require('./config/odbcConnection');
 const app = express();
 const port = process.env.PORT || 3003;
 const SECRET_KEY = process.env.SECRET_KEY || 'secreto';
-
-const allowedOrigins = ["http://localhost:3000", "http://192.168.1.29:3000"];
-
-// Configuração de CORS personalizada
-app.use((req, res, next) => {
-  const origin = req.headers.origin;
-  if (allowedOrigins.includes(origin)) {
-    res.setHeader("Access-Control-Allow-Origin", origin); // Permitir a origem específica
-    res.setHeader("Access-Control-Allow-Credentials", "true"); // Permitir envio de credenciais
-    res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS"); // Métodos permitidos
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization"); // Cabeçalhos permitidos
-  }
-  
-  if (req.method === "OPTIONS") {
-    return res.status(200).end(); // Responder rapidamente a requisições preflight
-  }
-  
-  next();
-});
+const allowedOrigins = process.env.CLIENT_URL
 
 // Middleware genérico de CORS
 app.use(cors({
@@ -39,17 +21,19 @@ app.use(cors({
 // Outros middlewares
 app.use(bodyParser.json());
 app.use(cookieParser());
+app.use(express.json());
 
 function authMiddleware(req, res, next) {
-  const token = req.cookies.token; // Obtenha o token corretamente do cookie
+  const token = req.headers['authorization'] || req.cookies.token; // Obtenha o token corretamente do cookie
   if (!token) {
     return res.status(401).json({ error: 'Acesso negado. Faça login.' });
   }
-
   try {
-    const decoded = jwt.verify(token, SECRET_KEY);
-    req.user = decoded;
-    next();
+    jwt.verify(token.split(" ")[1], SECRET_KEY, (err, user) => {
+      if (err) return res.sendStatus(403);
+      req.user = user;
+      next();
+  });
   } catch (err) {
     return res.status(403).json({ error: 'Token inválido.' });
   }
@@ -131,42 +115,19 @@ async function filtrarUsuario(req) {
 
 module.exports = filtrarUsuario;
 
-// Rota de login sem middleware de autenticação
 app.post('/login', async (req, res) => {
-  try {
     const { email, senha } = req.body;
-
-    if (!email || !senha) {
-      return res.status(400).json({ error: 'Email e senha são obrigatórios.' });
+    try {    
+      const user = await User.findOne({ where: { email, senha } });
+      if (user) {
+        const token = jwt.sign({id: user.id, email: user.email, codi_emp: user.codi_emp, is_admin: user.is_admin}, SECRET_KEY, { expiresIn: '1h' });
+        res.json({token});
+      }else{
+        res.status(401).json({ error: 'Email ou senha inválidos' });
+      }
+    } catch (error) {
+      res.status(500).json({ error: 'Erro ao fazer login', details: error.message });
     }
-
-    const user = await User.findOne({ where: { email, senha } });
-
-    if (!user) {
-      return res.status(401).json({ error: 'Credenciais inválidas' });
-    }
-
-    const token = jwt.sign(
-      {
-        id: user.id,
-        email: user.email,
-        codi_emp: user.codi_emp,
-        is_admin: user.is_admin // 0 ou 1 diretamente do banco de dados
-      },
-      SECRET_KEY,
-      { expiresIn: '1h' }
-    );
-
-    res.cookie('token', token, {
-      httpOnly: true, // Evita acesso via JavaScript no front-end
-      secure: false, // Alterar para true em produção
-      sameSite: 'Lax', // Evita problemas com navegadores
-    });
-
-    res.json({ message: 'Login bem-sucedido', token });
-  } catch (error) {
-    res.status(500).json({ error: 'Erro ao fazer login', details: error.message });
-  }
 });
 
 // Exemplo de rota protegida
