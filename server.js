@@ -1,53 +1,34 @@
-// Importando dependências
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
 const jwt = require('jsonwebtoken');
 const cookieParser = require('cookie-parser');
-const User = require('./models/user');
 const connectToOdbc = require('./config/odbcConnection');
 
+const User = require('./models/user');
+
 const app = express();
-const port = process.env.PORT || 3003;
-const SECRET_KEY = process.env.SECRET_KEY || 'secreto';
+const port = process.env.PORT;
+const SECRET_KEY = process.env.SECRET_KEY;
 const allowedOrigins = process.env.CLIENT_URL
 
-// Middleware genérico de CORS
+
 app.use(cors({
-  origin: allowedOrigins,
-  credentials: true // Configurações para suportar credenciais
+  origin: "*",
+  credentials: true
 }));
 
-// Outros middlewares
 app.use(bodyParser.json());
 app.use(cookieParser());
 app.use(express.json());
 
-function authMiddleware(req, res, next) {
-  const token = req.headers['authorization'] || req.cookies.token; // Obtenha o token corretamente do cookie
-  if (!token) {
-    return res.status(401).json({ error: 'Acesso negado. Faça login.' });
-  }
-  try {
-    jwt.verify(token.split(" ")[1], SECRET_KEY, (err, user) => {
-      if (err) return res.sendStatus(403);
-      req.user = user;
-      next();
-  });
-  } catch (err) {
-    return res.status(403).json({ error: 'Token inválido.' });
-  }
-}
-
 async function validarCNPJ(req, res, next) {
   const { is_admin, cnpj } = req.body;
 
-  // Validar que o CNPJ só pode ser `null` para administradores
-  if (cnpj === null && !is_admin) {
+  if (cnpj === null && is_admin == 0) {
     return res.status(400).json({ error: 'Apenas administradores podem ter CNPJ como "null".' });
   }
 
-  // Validar a unicidade do CNPJ quando fornecido
   if (cnpj) {
     const usuarioExistente = await User.findOne({ where: { cnpj } });
     if (usuarioExistente) {
@@ -58,17 +39,14 @@ async function validarCNPJ(req, res, next) {
   next();
 }
 
-// Função para calcular o último dia do mês
 function getUltimoDiaMes(ano, mes) {
   return new Date(ano, mes, 0).getDate();
 }
 
-// Lista de codi_nat que devem ser excluídos da soma
 const codiNatExcluidos = new Set([
   1116, 1151, 1152, 1153, 1154, 1201, 1202, 1203, 1204, 1205, 1206, 1207, 1208, 1209, 1408, 1409, 1410, 1411, 1414, 1415, 1451, 1452, 1501, 1503, 1504, 1552, 1553, 1554, 1555, 1556, 1557, 1601, 1602, 1603, 1604, 1605, 1658, 1659, 1660, 1661, 1662, 1663, 1664, 1901, 1902, 1903, 1904, 1905, 1906, 1907, 1908, 1909, 1910, 1913, 1914, 1916, 1917, 1918, 1919, 1921, 1922, 1923, 1924, 1925, 1926, 1931, 2151, 2152, 2153, 2154, 2201, 2202, 2203, 2204, 2205, 2206, 2207, 2208, 2209, 2408, 2409, 2410, 2411, 2414, 2415, 2501, 2503, 2504, 2551, 2552, 2553, 2554, 2555, 2556, 2557, 2603, 2658, 2659, 2660, 2661, 2662, 2663, 2664, 2901, 2902, 2903, 2904, 2905, 2906, 2907, 2908, 2909, 2910, 2913, 2914, 2915, 2916, 2917, 2918, 2919, 2921, 2922, 2923, 2924, 2925, 2931, 3201, 3202, 3205, 3206, 3207, 3211, 3503, 3553, 5124, 5125, 5151, 5152, 5153, 5155, 5156, 5201, 5202, 5205, 5206, 5207, 5208, 5209, 5210, 5408, 5409, 5410, 5411, 5412, 5413, 5414, 5415, 5451, 5501, 5502, 5503, 5552, 5553, 5554, 5555, 5556, 5557, 5601, 5602, 5603, 5605, 5658, 5659, 5660, 5661, 5662, 5663, 5664, 5665, 5666, 5901, 5902, 5903, 5904, 5905, 5906, 5907, 5909, 5913, 5916, 5917, 5918, 5919, 5921, 5922, 5923, 5924, 5925, 5926, 5929, 5931, 6124, 6125, 6151, 6152, 6153, 6156, 6201, 6202, 6205, 6206, 6207, 6208, 6209, 6210, 6408, 6409, 6410, 6411, 6412, 6413, 6414, 6415, 6501, 6502, 6503, 6551, 6552, 6553, 6554, 6555, 6556, 6557, 6603, 6658, 6659, 6660, 6661, 6662, 6663, 6664, 6665, 6666, 6901, 6902, 6903, 6904, 6905, 6906, 6907, 6909, 6913, 6916, 6917, 6918, 6919, 6921, 6922, 6923, 6924, 6925, 6929, 6931
 ]);
 
-// Função para filtrar codi_nat e calcular soma excluída
 function filtrarResultados(resultados) {
   const excluidos = resultados.filter(row => codiNatExcluidos.has(parseInt(row.codi_nat)));
   const somaExcluida = excluidos.reduce((acc, row) => acc + (row.vcon_ent || row.vcon_sai), 0);
@@ -77,7 +55,7 @@ function filtrarResultados(resultados) {
 
 async function filtrarRubricas() {
   try {
-    const odbcConnection = await connectToOdbc(); // Certifique-se de que a conexão ODBC está configurada
+    const odbcConnection = await connectToOdbc(); 
     const query = `
       SELECT i_eventos
       FROM bethadba.foeventos
@@ -95,15 +73,13 @@ async function filtrarRubricas() {
 
 async function filtrarUsuario(req) {
   try {
-    const isAdmin = req.user.is_admin; // Verifica se o usuário é administrador
+    const isAdmin = req.user.is_admin; 
     let codigosEmpresa = [];
 
     if (isAdmin === 0) {
-      // Usuário não administrador
-      codigosEmpresa = req.user.codi_emp || []; // Obtém codi_emp do usuário autenticado
+      codigosEmpresa = req.user.codi_emp || []; 
     } else {
-      // Usuário administrador
-      codigosEmpresa = req.body.codigo_empresa || []; // Obtém codi_emp da requisição
+      codigosEmpresa = req.body.codigo_empresa || []; 
     }
 
     return codigosEmpresa;
@@ -114,6 +90,33 @@ async function filtrarUsuario(req) {
 }
 
 module.exports = filtrarUsuario;
+
+function authMiddleware(req, res, next) {
+  console.log("Cabeçalhos recebidos:", req.headers);
+
+  const authHeader = req.headers['authorization'];
+  if (!authHeader) {
+    return res.status(401).json({ error: 'Acesso negado. Faça login.' });
+  }
+
+  const token = authHeader.split(" ")[1]; // Garante que pega só o token
+  console.log("Token recebido:", token);
+
+  try {
+    jwt.verify(token, SECRET_KEY, (err, user) => {
+      if (err) {
+        console.error("Erro ao verificar token:", err);
+        return res.status(403).json({ error: 'Token inválido ou expirado.' });
+      }
+      req.user = user;
+      next();
+    });
+  } catch (err) {
+    console.error("Erro inesperado ao verificar token:", err);
+    return res.status(403).json({ error: 'Token inválido.' });
+  }
+}
+
 
 app.post('/login', async (req, res) => {
     const { email, senha } = req.body;
@@ -130,8 +133,7 @@ app.post('/login', async (req, res) => {
     }
 });
 
-// Exemplo de rota protegida
-app.get('/users', authMiddleware, async (req, res) => {
+app.get('/users', async (req, res) => {
   try {
     const users = await User.findAll();
     res.json(users);
@@ -166,6 +168,7 @@ app.post('/user', validarCNPJ, async (req, res) => {
     });
 
     res.status(201).json(user);
+    console.log("cadastro realizado com sucesso")
   } catch (error) {
     console.error("Erro ao criar usuário:", error);
     res.status(500).json({ error: 'Erro ao criar usuário', details: error.message });
@@ -177,7 +180,6 @@ app.put('/user/:id', validarCNPJ, async (req, res) => {
     const { id } = req.params;
     const dadosAtualizados = req.body;
 
-    // Impede alterações no campo `id`
     if (dadosAtualizados.id !== undefined) {
       return res.status(400).json({ error: 'O campo "id" não pode ser alterado.' });
     }
@@ -188,7 +190,6 @@ app.put('/user/:id', validarCNPJ, async (req, res) => {
       return res.status(404).json({ error: 'Usuário não encontrado' });
     }
 
-    // Atualiza apenas os campos fornecidos no corpo da requisição
     Object.keys(dadosAtualizados).forEach((campo) => {
       if (user[campo] !== undefined) {
         user[campo] = dadosAtualizados[campo];
