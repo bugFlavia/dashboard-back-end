@@ -184,21 +184,30 @@ app.get('/listaEmpresas', authMiddleware, async (req, res) => {
       WHERE codi_emp < 500
     `);
 
-    // Formatando celular e transformando codi_emp em array
-    const empresasFormatadas = empresas.map(empresa => ({
-      ...empresa,
-      celular: `${empresa.dddf_emp}${empresa.fone_emp}`, 
-      codi_emp: empresa.codi_emp 
-        ? Array.isArray(empresa.codi_emp) 
-          ? [empresa.codi_emp, ...empresa.codi_emp] // Adiciona o código da empresa como primeiro valor do array
-          : typeof empresa.codi_emp === "string"
-          ? [empresa.codi_emp] 
-          : [] 
-        : [], // Garante que seja sempre um array
-    }));
-    
+    // Formatando celular e garantindo que codi_emp seja um array válido
+    const empresasFormatadas = empresas.map(empresa => {
+      let codiEmpArray = [];
+  
+      if (empresa.codi_emp) {
+          if (Array.isArray(empresa.codi_emp) && empresa.codi_emp.length > 0) {
+              codiEmpArray = empresa.codi_emp;
+          } else if (typeof empresa.codi_emp === "string" || typeof empresa.codi_emp === "number") {
+              codiEmpArray = [empresa.codi_emp]; // Converte para array se for um único valor
+          }
+      }
+  
+      return {
+          ...empresa,
+          celular: `${empresa.dddf_emp}${empresa.fone_emp}`,
+          codi_emp: codiEmpArray, // Garantir que codi_emp seja sempre um array
+      };
+  });
+
+    console.log("Empresas formatadas:", empresasFormatadas);
+
     res.json(empresasFormatadas);
   } catch (error) {
+    console.error("Erro ao buscar empresas:", error);
     res.status(500).json({ error: 'Erro ao buscar empresas', details: error.message });
   }
 });
