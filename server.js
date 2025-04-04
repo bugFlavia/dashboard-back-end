@@ -133,7 +133,7 @@ app.post('/login', async (req, res) => {
     }
 });
 
-app.get('/users', async (req, res) => {
+app.get('/users', authMiddleware, async (req, res) => {
   try {
     const users = await User.findAll();
     res.json(users);
@@ -151,7 +151,7 @@ app.get('/empresas', authMiddleware, async (req, res) => {
   }
 });
 
-app.post('/user', validarCNPJ, async (req, res) => {
+app.post('/user', authMiddleware, validarCNPJ, async (req, res) => {
   try {
     const { nome, nome_empresa, cpf, cnpj, codi_emp, celular, email, senha, is_admin} = req.body;
 
@@ -175,28 +175,35 @@ app.post('/user', validarCNPJ, async (req, res) => {
   }
 });
 
-app.get('/listaEmpresas', async (req, res) => {
+app.get('/listaEmpresas', authMiddleware, async (req, res) => {
   try {
     const odbcConnection = await connectToOdbc();
     const empresas = await odbcConnection.query(`
       SELECT razao_emp, rleg_emp, cpf_leg_emp, cgce_emp, codi_emp, dddf_emp, fone_emp, email_emp
       FROM bethadba.geempre
+      WHERE codi_emp < 500
     `);
 
     // Formatando celular e transformando codi_emp em array
     const empresasFormatadas = empresas.map(empresa => ({
       ...empresa,
-      celular: `${empresa.dddf_emp}${empresa.fone_emp}`, // Concatenando DDD + telefone
-      codi_emp: empresa.codi_emp ? JSON.parse(empresa.codi_emp) : [] // Garantindo que codi_emp seja um array JSON
+      celular: `${empresa.dddf_emp}${empresa.fone_emp}`, 
+      codi_emp: empresa.codi_emp 
+        ? Array.isArray(empresa.codi_emp) 
+          ? [empresa.codi_emp, ...empresa.codi_emp] // Adiciona o código da empresa como primeiro valor do array
+          : typeof empresa.codi_emp === "string"
+          ? [empresa.codi_emp] 
+          : [] 
+        : [], // Garante que seja sempre um array
     }));
-
+    
     res.json(empresasFormatadas);
   } catch (error) {
     res.status(500).json({ error: 'Erro ao buscar empresas', details: error.message });
   }
 });
 
-app.put('/user/:id', validarCNPJ, async (req, res) => {
+app.put('/user/:id', authMiddleware, validarCNPJ, async (req, res) => {
   try {
     const { id } = req.params;
     const dadosAtualizados = req.body;
@@ -226,7 +233,7 @@ app.put('/user/:id', validarCNPJ, async (req, res) => {
   }
 });
 
-app.delete('/user/:id', async (req, res) => {
+app.delete('/user/:id', authMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
     const user = await User.findByPk(id);
