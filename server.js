@@ -175,6 +175,27 @@ app.post('/user', validarCNPJ, async (req, res) => {
   }
 });
 
+app.get('/listaEmpresas', async (req, res) => {
+  try {
+    const odbcConnection = await connectToOdbc();
+    const empresas = await odbcConnection.query(`
+      SELECT razao_emp, rleg_emp, cpf_leg_emp, cgce_emp, codi_emp, dddf_emp, fone_emp, email_emp
+      FROM bethadba.geempre
+    `);
+
+    // Formatando celular e transformando codi_emp em array
+    const empresasFormatadas = empresas.map(empresa => ({
+      ...empresa,
+      celular: `${empresa.dddf_emp}${empresa.fone_emp}`, // Concatenando DDD + telefone
+      codi_emp: empresa.codi_emp ? JSON.parse(empresa.codi_emp) : [] // Garantindo que codi_emp seja um array JSON
+    }));
+
+    res.json(empresasFormatadas);
+  } catch (error) {
+    res.status(500).json({ error: 'Erro ao buscar empresas', details: error.message });
+  }
+});
+
 app.put('/user/:id', validarCNPJ, async (req, res) => {
   try {
     const { id } = req.params;
